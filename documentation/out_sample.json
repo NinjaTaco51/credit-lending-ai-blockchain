@@ -1,0 +1,11 @@
+{
+  "score": 0.82,
+  "score_band": "B",
+  "reasons": [
+    "Low debt-to-income ratio",
+    "Stable income",
+    "High credit utilization"
+  ],
+  "model_id": "PyTorch_MLP_v1",
+  "timestamp": "2025-10-05T15:30:00Z"
+}
