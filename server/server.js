@@ -9,9 +9,31 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Routes
-app.get("/", (req, res) => {
-  res.send({ message: "Welcome to the Fast API!" });
+app.post("/api/credit-score", async (req, res) => {
+  const { userId } = req.body;
+
+  let score = await getCreditScoreFromDatabase(userId);
+
+  if (score === null) {
+    const apiResponse = await fetch ("https://external-credit-score-api.com/getScore", { // Example external API URL
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    const modelResult = await apiResponse.json();
+
+    // save to database
+    score = await CreditScoreModel.create({
+      userID,
+      score: modelResult.score,
+      createAt: new Date()
+    });
+  }
+
+  res.json({ score: score.score });
 });
+
+
 
 // Start Server
 const PORT = process.env.PORT || 3000;
