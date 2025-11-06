@@ -1,178 +1,119 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.27;
+
+import "./CreditScore.sol";
+
 contract LendingPlatform {
-    struct Loan {
-        address borrower;
-        address lender;
-        uint256 amount;
-        uint256 interestRate; // Basis points (e.g., 500 = 5%)
-        uint256 duration; // In seconds
-        uint256 startTime;
-        uint256 totalRepayment;
-        uint256 amountRepaid;
-        LoanStatus status;
-    }
-    
-    enum LoanStatus {
-        Requested,
-        Active,
-        Repaid,
-        Defaulted
-    }
+    CreditScore public creditScore;
+    address public admin;
+    uint256 public nextRequestId;
+    uint256 public nextLoanId;
     
     struct LoanRequest {
+        uint256 requestId;
         address borrower;
         uint256 amount;
         uint256 interestRate;
         uint256 duration;
+        bool isFunded;
+    }
+    
+    struct Loan {
+        uint256 loanId;
+        address borrower;
+        address lender;
+        uint256 amount;
+        uint256 interestRate;
+        uint256 duration;
+        uint256 startTime;
+        uint256 amountRepaid;
         bool isActive;
     }
     
-    mapping(uint256 => Loan) public loans;
     mapping(uint256 => LoanRequest) public loanRequests;
-    uint256 public loanCounter;
-    uint256 public requestCounter;
-    
-    CreditScore public creditScoreContract;
+    mapping(uint256 => Loan) public loans;
+    mapping(address => uint256[]) public borrowerLoans;
+    mapping(address => uint256[]) public lenderLoans;
     
     event LoanRequested(uint256 indexed requestId, address indexed borrower, uint256 amount);
     event LoanFunded(uint256 indexed loanId, address indexed lender, address indexed borrower);
     event RepaymentMade(uint256 indexed loanId, uint256 amount);
     event LoanCompleted(uint256 indexed loanId);
-    event LoanDefaulted(uint256 indexed loanId);
     
     constructor(address _creditScoreAddress) {
-        creditScoreContract = CreditScore(_creditScoreAddress);
+        creditScore = CreditScore(_creditScoreAddress);
+        admin = msg.sender;
     }
     
-    // Borrower creates a loan request
-    function requestLoan(uint256 _amount, uint256 _interestRate, uint256 _duration) external returns (uint256) {
-        require(_amount > 0, "Amount must be > 0");
-        require(_duration > 0, "Duration must be > 0");
+    function requestLoan(uint256 _amount, uint256 _interestRate, uint256 _duration) external {
+        require(_amount > 0, "Amount must be greater than 0");
         
-        uint256 creditScore = creditScoreContract.getCreditScore(msg.sender);
-        require(creditScore >= 400, "Credit score too low");
-        
-        uint256 requestId = requestCounter++;
-        loanRequests[requestId] = LoanRequest({
+        loanRequests[nextRequestId] = LoanRequest({
+            requestId: nextRequestId,
             borrower: msg.sender,
             amount: _amount,
             interestRate: _interestRate,
             duration: _duration,
-            isActive: true
+            isFunded: false
         });
         
-        emit LoanRequested(requestId, msg.sender, _amount);
-        return requestId;
+        emit LoanRequested(nextRequestId, msg.sender, _amount);
+        nextRequestId++;
     }
     
-    // Lender funds a loan request
-    function fundLoan(uint256 _requestId) external payable returns (uint256) {
+    function fundLoan(uint256 _requestId) external payable {
         LoanRequest storage request = loanRequests[_requestId];
-        require(request.isActive, "Request not active");
-        require(msg.value == request.amount, "Incorrect amount");
-        require(msg.sender != request.borrower, "Cannot fund own loan");
+        require(!request.isFunded, "Loan already funded");
+        require(msg.value >= request.amount, "Insufficient funds");
+        require(msg.sender != request.borrower, "Cannot fund your own loan");
         
-        // Transfer funds to borrower
-        payable(request.borrower).transfer(msg.value);
+        request.isFunded = true;
         
-        // Calculate total repayment
-        uint256 interest = (request.amount * request.interestRate) / 10000;
-        uint256 totalRepayment = request.amount + interest;
-        
-        // Create loan
-        uint256 loanId = loanCounter++;
-        loans[loanId] = Loan({
+        loans[nextLoanId] = Loan({
+            loanId: nextLoanId,
             borrower: request.borrower,
             lender: msg.sender,
             amount: request.amount,
             interestRate: request.interestRate,
             duration: request.duration,
             startTime: block.timestamp,
-            totalRepayment: totalRepayment,
             amountRepaid: 0,
-            status: LoanStatus.Active
+            isActive: true
         });
         
-        // Deactivate request
-        request.isActive = false;
+        borrowerLoans[request.borrower].push(nextLoanId);
+        lenderLoans[msg.sender].push(nextLoanId);
         
-        emit LoanFunded(loanId, msg.sender, request.borrower);
-        return loanId;
+        payable(request.borrower).transfer(request.amount);
+        
+        emit LoanFunded(nextLoanId, msg.sender, request.borrower);
+        nextLoanId++;
     }
     
-    // Borrower makes repayment
     function makeRepayment(uint256 _loanId) external payable {
         Loan storage loan = loans[_loanId];
-        require(loan.status == LoanStatus.Active, "Loan not active");
-        require(msg.sender == loan.borrower, "Not borrower");
-        require(msg.value > 0, "Amount must be > 0");
-        
-        uint256 remainingAmount = loan.totalRepayment - loan.amountRepaid;
-        require(msg.value <= remainingAmount, "Exceeds remaining amount");
+        require(loan.isActive, "Loan not active");
+        require(msg.sender == loan.borrower, "Only borrower can repay");
+        require(msg.value > 0, "Repayment must be greater than 0");
         
         loan.amountRepaid += msg.value;
-        payable(loan.lender).transfer(msg.value);
         
-        emit RepaymentMade(_loanId, msg.value);
+        uint256 totalOwed = loan.amount + (loan.amount * loan.interestRate / 10000);
         
-        // Check if fully repaid
-        if (loan.amountRepaid >= loan.totalRepayment) {
-            loan.status = LoanStatus.Repaid;
-            creditScoreContract.updateCreditScore(loan.borrower, true, loan.amount);
+        if (loan.amountRepaid >= totalOwed) {
+            loan.isActive = false;
             emit LoanCompleted(_loanId);
         }
-    }
-    
-    // Mark loan as defaulted (can be called by lender after duration expires)
-    function markAsDefaulted(uint256 _loanId) external {
-        Loan storage loan = loans[_loanId];
-        require(loan.status == LoanStatus.Active, "Loan not active");
-        require(msg.sender == loan.lender, "Not lender");
-        require(block.timestamp > loan.startTime + loan.duration, "Loan not expired");
-        require(loan.amountRepaid < loan.totalRepayment, "Loan already repaid");
         
-        loan.status = LoanStatus.Defaulted;
-        creditScoreContract.updateCreditScore(loan.borrower, false, loan.amount);
-        emit LoanDefaulted(_loanId);
+        payable(loan.lender).transfer(msg.value);
+        emit RepaymentMade(_loanId, msg.value);
     }
     
-    // View functions
-    function getLoanDetails(uint256 _loanId) external view returns (
-        address borrower,
-        address lender,
-        uint256 amount,
-        uint256 interestRate,
-        uint256 totalRepayment,
-        uint256 amountRepaid,
-        uint256 dueDate,
-        LoanStatus status
-    ) {
-        Loan memory loan = loans[_loanId];
-        return (
-            loan.borrower,
-            loan.lender,
-            loan.amount,
-            loan.interestRate,
-            loan.totalRepayment,
-            loan.amountRepaid,
-            loan.startTime + loan.duration,
-            loan.status
-        );
+    function getLoanRequest(uint256 _requestId) external view returns (LoanRequest memory) {
+        return loanRequests[_requestId];
     }
     
-    function getLoanRequest(uint256 _requestId) external view returns (
-        address borrower,
-        uint256 amount,
-        uint256 interestRate,
-        uint256 duration,
-        bool isActive
-    ) {
-        LoanRequest memory request = loanRequests[_requestId];
-        return (
-            request.borrower,
-            request.amount,
-            request.interestRate,
-            request.duration,
-            request.isActive
-        );
+    function getLoanDetails(uint256 _loanId) external view returns (Loan memory) {
+        return loans[_loanId];
     }
 }

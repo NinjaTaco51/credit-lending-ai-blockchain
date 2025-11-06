@@ -1,68 +1,77 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.27;
+
 contract CreditScore {
-    struct CreditProfile {
+    struct UserCredit {
         uint256 score;
         uint256 totalLoans;
         uint256 successfulRepayments;
-        uint256 defaultedLoans;
-        uint256 totalBorrowed;
-        uint256 totalRepaid;
+        uint256 missedPayments;
         bool isRegistered;
     }
     
-    mapping(address => CreditProfile) public creditProfiles;
+    mapping(address => UserCredit) public userCredits;
     address public admin;
     
-    event CreditScoreUpdated(address indexed user, uint256 newScore);
     event UserRegistered(address indexed user);
+    event CreditScoreUpdated(address indexed user, uint256 newScore);
     
     constructor() {
         admin = msg.sender;
     }
     
     modifier onlyAdmin() {
-        require(msg.sender == admin, "Only admin");
+        require(msg.sender == admin, "Only admin can call this");
         _;
     }
     
-    function registerUser(address _user) external {
-        require(!creditProfiles[_user].isRegistered, "Already registered");
-        creditProfiles[_user] = CreditProfile({
-            score: 500, // Starting score
+    function registerUser(address _user) external onlyAdmin {
+        require(!userCredits[_user].isRegistered, "User already registered");
+        userCredits[_user] = UserCredit({
+            score: 500,
             totalLoans: 0,
             successfulRepayments: 0,
-            defaultedLoans: 0,
-            totalBorrowed: 0,
-            totalRepaid: 0,
+            missedPayments: 0,
             isRegistered: true
         });
         emit UserRegistered(_user);
     }
     
-    function updateCreditScore(address _user, bool _successful, uint256 _amount) external onlyAdmin {
-        CreditProfile storage profile = creditProfiles[_user];
-        require(profile.isRegistered, "User not registered");
+    function updateCreditScore(
+        address _user,
+        uint256 _totalLoans,
+        uint256 _successfulRepayments,
+        uint256 _missedPayments
+    ) external onlyAdmin {
+        require(userCredits[_user].isRegistered, "User not registered");
         
-        if (_successful) {
-            profile.successfulRepayments++;
-            profile.totalRepaid += _amount;
-            profile.score = min(profile.score + 20, 850);
-        } else {
-            profile.defaultedLoans++;
-            profile.score = max(profile.score - 50, 300);
+        UserCredit storage credit = userCredits[_user];
+        credit.totalLoans = _totalLoans;
+        credit.successfulRepayments = _successfulRepayments;
+        credit.missedPayments = _missedPayments;
+        
+        uint256 newScore = 500;
+        if (_totalLoans > 0) {
+            uint256 successRate = (_successfulRepayments * 100) / _totalLoans;
+            newScore = 300 + (successRate * 7);
+            
+            if (_missedPayments > 0) {
+                newScore = newScore > (_missedPayments * 50) ? newScore - (_missedPayments * 50) : 0;
+            }
+            
+            if (newScore > 850) newScore = 850;
         }
         
-        emit CreditScoreUpdated(_user, profile.score);
+        credit.score = newScore;
+        emit CreditScoreUpdated(_user, newScore);
     }
     
     function getCreditScore(address _user) external view returns (uint256) {
-        return creditProfiles[_user].score;
+        require(userCredits[_user].isRegistered, "User not registered");
+        return userCredits[_user].score;
     }
     
-    function min(uint256 a, uint256 b) private pure returns (uint256) {
-        return a < b ? a : b;
-    }
-    
-    function max(uint256 a, uint256 b) private pure returns (uint256) {
-        return a > b ? a : b;
+    function getUserCredit(address _user) external view returns (UserCredit memory) {
+        return userCredits[_user];
     }
 }
