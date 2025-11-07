@@ -28,13 +28,14 @@ export default function CreditScoreDashboard() {
   const scorePercentage = (creditScore / 850) * 100;
   
   const navItems = [
-    { icon: CreditCard, label: 'Accounts', href: '#accounts' },
-    { icon: History, label: 'History', href: '#history' },
-    { icon: DollarSign, label: 'Loan Portal', href: '#loans' },
-    { icon: User, label: 'Profile', href: '#profile' },
-    { icon: FileText, label: 'Terms & Privacy', href: '#terms' },
-    { icon: BookOpen, label: 'Resources', href: '#resources' },
-    { icon: HelpCircle, label: 'Support', href: '#support' }
+    { icon: CreditCard,label: 'Dashboard', href: 'dashboard'},
+    { icon: CreditCard, label: 'Accounts', href: 'accounts' },
+    { icon: History, label: 'History', href: 'history' },
+    { icon: DollarSign, label: 'Loan Portal', href: 'loans' },
+    { icon: User, label: 'Profile', href: 'profile' },
+    { icon: FileText, label: 'Terms & Privacy', href: 'terms' },
+    { icon: BookOpen, label: 'Resources', href: 'resources' },
+    { icon: HelpCircle, label: 'Support', href: 'support' }
   ];
   
   return (
