@@ -8,12 +8,26 @@ export default function CreditScoreDashboard() {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
-    dob: '',
-    ssn: '',
     phone: '',
-    address: '',
-    city: '',
-    zipCode: ''
+    dob: '',
+    monthlyIncome: '',
+    takeHomePay: '',
+    housingCost: '',
+    otherExpenses: '',
+    occupation: '',
+    employmentTenure: '',
+    educationLevel: '',
+    loanTypes: {
+      mortgage: false,
+      auto: false,
+      student: false,
+      personal: false,
+      creditCard: false,
+      other: false
+    },
+    consentCredit: false,
+    consentTerms: false,
+    consentMarketing: false
   });
   
   const creditScore = 742;
@@ -39,6 +53,24 @@ export default function CreditScoreDashboard() {
       ...formData,
       [e.target.name]: e.target.value
     });
+  };
+  
+  const handleCheckboxChange = (e) => {
+    const { name, checked } = e.target;
+    if (name in formData.loanTypes) {
+      setFormData({
+        ...formData,
+        loanTypes: {
+          ...formData.loanTypes,
+          [name]: checked
+        }
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: checked
+      });
+    }
   };
   
   const handleSubmit = (e) => {
@@ -126,13 +158,14 @@ export default function CreditScoreDashboard() {
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Side - Input Form */}
-          <div className="bg-white rounded-2xl shadow-lg p-8">
+          <div className="bg-white rounded-2xl shadow-lg p-8 max-h-[800px] overflow-y-auto">
             <h3 className="text-2xl font-bold text-slate-800 mb-6">Your Information</h3>
             
             <div className="space-y-4">
+              {/* Full Name */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Full Name
+                  Full Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -141,12 +174,14 @@ export default function CreditScoreDashboard() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="John Doe"
+                  required
                 />
               </div>
               
+              {/* Email Address */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Email Address
+                  Email Address <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
@@ -155,40 +190,14 @@ export default function CreditScoreDashboard() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="john@example.com"
+                  required
                 />
               </div>
               
+              {/* Phone Number */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Date of Birth
-                </label>
-                <input
-                  type="date"
-                  name="dob"
-                  value={formData.dob}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Social Security Number
-                </label>
-                <input
-                  type="text"
-                  name="ssn"
-                  value={formData.ssn}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="XXX-XX-XXXX"
-                  maxLength={11}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Phone Number
+                  Phone Number <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
@@ -197,49 +206,284 @@ export default function CreditScoreDashboard() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="(555) 123-4567"
+                  required
                 />
               </div>
               
+              {/* Date of Birth */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Address
+                  Date of Birth <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
+                  type="date"
+                  name="dob"
+                  value={formData.dob}
                   onChange={handleInputChange}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="123 Main St"
+                  required
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    City
-                  </label>
+              {/* Monthly Income */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Monthly Income (Gross) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-2.5 text-slate-500">$</span>
                   <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
+                    type="number"
+                    name="monthlyIncome"
+                    value={formData.monthlyIncome}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="New York"
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="5000"
+                    required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    ZIP Code
-                  </label>
+              </div>
+              
+              {/* Take Home Pay */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Take Home Pay (Net) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-2.5 text-slate-500">$</span>
                   <input
-                    type="text"
-                    name="zipCode"
-                    value={formData.zipCode}
+                    type="number"
+                    name="takeHomePay"
+                    value={formData.takeHomePay}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="10001"
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="3800"
+                    required
                   />
+                </div>
+              </div>
+              
+              {/* Monthly Housing Cost */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Monthly Housing Cost (Rent/Mortgage) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-2.5 text-slate-500">$</span>
+                  <input
+                    type="number"
+                    name="housingCost"
+                    value={formData.housingCost}
+                    onChange={handleInputChange}
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="1500"
+                    required
+                  />
+                </div>
+              </div>
+              
+              {/* Other Monthly Expenses */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Other Monthly Expenses <span className="text-red-500">*</span>
+                  <span className="text-xs text-slate-500 block mt-1">(Insurance, food, utilities, etc.)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-2.5 text-slate-500">$</span>
+                  <input
+                    type="number"
+                    name="otherExpenses"
+                    value={formData.otherExpenses}
+                    onChange={handleInputChange}
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="800"
+                    required
+                  />
+                </div>
+              </div>
+              
+              {/* Job / Occupation */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Job / Occupation <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="occupation"
+                  value={formData.occupation}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select occupation</option>
+                  <option value="professional">Professional/Technical</option>
+                  <option value="management">Management/Executive</option>
+                  <option value="sales">Sales</option>
+                  <option value="administrative">Administrative/Clerical</option>
+                  <option value="service">Service Industry</option>
+                  <option value="manufacturing">Manufacturing/Production</option>
+                  <option value="healthcare">Healthcare</option>
+                  <option value="education">Education</option>
+                  <option value="government">Government</option>
+                  <option value="self-employed">Self-Employed</option>
+                  <option value="retired">Retired</option>
+                  <option value="student">Student</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              {/* Employment Tenure */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Employment Tenure (Years) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="employmentTenure"
+                  value={formData.employmentTenure}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="5"
+                  min="0"
+                  step="0.5"
+                  required
+                />
+              </div>
+              
+              {/* Educational Level */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Educational Level <span className="text-slate-500">(Optional)</span>
+                </label>
+                <select
+                  name="educationLevel"
+                  value={formData.educationLevel}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select education level</option>
+                  <option value="high-school">High School</option>
+                  <option value="some-college">Some College</option>
+                  <option value="associate">Associate Degree</option>
+                  <option value="bachelor">Bachelor's Degree</option>
+                  <option value="master">Master's Degree</option>
+                  <option value="doctorate">Doctorate</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              {/* Loan Types Held */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-3">
+                  Loan Types Currently Held
+                </label>
+                <div className="space-y-2 pl-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="mortgage"
+                      checked={formData.loanTypes.mortgage}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Mortgage</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="auto"
+                      checked={formData.loanTypes.auto}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Auto Loan</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="student"
+                      checked={formData.loanTypes.student}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Student Loan</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="personal"
+                      checked={formData.loanTypes.personal}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Personal Loan</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="creditCard"
+                      checked={formData.loanTypes.creditCard}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Credit Card</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="other"
+                      checked={formData.loanTypes.other}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Other</span>
+                  </label>
+                </div>
+              </div>
+              
+              {/* Consent Flags */}
+              <div className="pt-4 border-t border-slate-200">
+                <label className="block text-sm font-medium text-slate-700 mb-3">
+                  Consent & Agreements
+                </label>
+                <div className="space-y-3">
+                  <label className="flex items-start">
+                    <input
+                      type="checkbox"
+                      name="consentCredit"
+                      checked={formData.consentCredit}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 mt-1 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                    <span className="ml-2 text-sm text-slate-700">
+                      I authorize CreditView to access my credit report <span className="text-red-500">*</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start">
+                    <input
+                      type="checkbox"
+                      name="consentTerms"
+                      checked={formData.consentTerms}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 mt-1 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                    <span className="ml-2 text-sm text-slate-700">
+                      I agree to the Terms of Service and Privacy Policy <span className="text-red-500">*</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start">
+                    <input
+                      type="checkbox"
+                      name="consentMarketing"
+                      checked={formData.consentMarketing}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 mt-1 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">
+                      I agree to receive marketing communications (optional)
+                    </span>
+                  </label>
                 </div>
               </div>
               
@@ -247,7 +491,7 @@ export default function CreditScoreDashboard() {
                 onClick={handleSubmit}
                 className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg"
               >
-                Update Information
+                Submit Information
               </button>
             </div>
           </div>
