@@ -1,312 +1,346 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import React, { useState } from 'react';
+import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X } from 'lucide-react';
 
-// --- Simple local DB helpers (localStorage) ---
-const DB_KEY = "credit_scoring_records_v1";
-const loadRecords = () => {
-  try { return JSON.parse(localStorage.getItem(DB_KEY) || "[]"); } catch { return []; }
-};
-const saveRecords = (recs) => localStorage.setItem(DB_KEY, JSON.stringify(recs));
-const clearRecords = () => localStorage.removeItem(DB_KEY);
-
-// --- Types ---
-/** @typedef {{ id:string, ts:number, applicant:{name:string, email:string}, inputs:any, score:number, pd:number, band:string, reasons:{code:string,label:string,direction:"+"|"-", delta:number}[] }} ScoreRecord */
-
-// --- Utility functions ---
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const fmtPct = (x) => `${(x*100).toFixed(1)}%`;
-const toBand = (score) => score >= 720 ? "A" : score >= 680 ? "B" : score >= 640 ? "C" : score >= 600 ? "D" : "E";
-
-// Sigmoid helper for PD mapping (rough, illustrative)
-const pdFromScore = (score) => {
-  // Map 300-850 to odds and then PD; purely illustrative
-  const odds = Math.pow(2, (score - 600) / 50); // 50 pts doubles odds
-  const pd = 1 / (1 + odds); // higher score -> lower PD
-  return clamp(pd, 0.001, 0.95);
-};
-
-// --- Mock SHAP-style explainer ---
-function explain(inputs){
-  const reasons = [];
-  const { income, expenses, debt, util, late3m, empYears, savingsRate } = inputs;
-  const dti = income > 0 ? (debt + expenses) / income : 1; // debt+expenses to income
-  const vol = inputs.balanceVol; // 0..1
-
-  // Negative drivers
-  if(dti > 0.45) reasons.push({code:"RC01", label:"High debt-to-income ratio", direction:"-", delta: -25});
-  if(util > 0.5) reasons.push({code:"RC11", label:"High credit utilization", direction:"-", delta: -18});
-  if(late3m > 0) reasons.push({code:"RC02", label:"Recent missed payments", direction:"-", delta: -22});
-  if(vol > 0.6) reasons.push({code:"RC05", label:"High balance fluctuation", direction:"-", delta: -10});
-
-  // Positive drivers
-  if(empYears >= 2) reasons.push({code:"RC09", label:"Stable employment history", direction:"+", delta: +12});
-  if(savingsRate >= 0.15) reasons.push({code:"RC10", label:"Healthy savings-to-income", direction:"+", delta: +10});
-  if(dti <= 0.3) reasons.push({code:"RC15", label:"Low debt-to-income", direction:"+", delta: +14});
-  if(util <= 0.2) reasons.push({code:"RC16", label:"Low credit utilization", direction:"+", delta: +8});
-
-  // Rank by absolute impact and keep top 5
-  reasons.sort((a,b)=> Math.abs(b.delta) - Math.abs(a.delta));
-  return reasons.slice(0,5);
-}
-
-function computeScore(inputs){
-  // Start from a baseline and add contributions to simulate a scorecard
-  let score = 660; // neutral-ish baseline
-  const { income, expenses, debt, util, late3m, empYears, savingsRate } = inputs;
-  const dti = income > 0 ? (debt + expenses) / income : 1;
-
-  // Penalize/Reward based on simple rules (illustrative only)
-  score += clamp( (0.35 - dti) * 200, -80, 40); // lower DTI -> higher score
-  score += clamp( (0.25 - util) * 150, -60, 30); // lower utilization -> higher score
-  score += empYears >= 2 ? 10 : -10;
-  score += clamp((savingsRate - 0.1) * 120, -20, 20);
-  score += - late3m * 15;
-
-  return clamp(Math.round(score), 300, 850);
-}
-
-// --- UI Components ---
-const Pill = ({children, tone="neutral"}) => (
-  <span className={`px-2 py-1 rounded-full text-xs font-medium ${tone==="good"?"bg-green-100 text-green-700": tone==="bad"?"bg-red-100 text-red-700":"bg-slate-100 text-slate-700"}`}>{children}</span>
-);
-
-export default function CreditScoringDashboard(){
-  const [records, setRecords] = useState/** @type {ScoreRecord[]} */(loadRecords());
-  const [loading, setLoading] = useState(false);
-  const [inputs, setInputs] = useState({
-    name: "",
-    email: "",
-    income: 6000,
-    expenses: 2000,
-    debt: 5000,
-    util: 0.35, // credit utilization 0..1
-    late3m: 0,
-    empYears: 1,
-    savingsRate: 0.08, // savings/income
-    balanceVol: 0.3,   // 0..1 volatility
-    loanAmount: 8000,
-    tenorMonths: 12,
+export default function CreditScoreDashboard() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    dob: '',
+    ssn: '',
+    phone: '',
+    address: '',
+    city: '',
+    zipCode: ''
   });
-
-  const dti = useMemo(()=> inputs.income>0 ? (inputs.debt + inputs.expenses)/inputs.income : 1, [inputs]);
-
-  const onChange = (k, v) => setInputs(prev => ({...prev, [k]: v}));
-
-  const handleScore = async () => {
-    setLoading(true);
-    // Simulate scoring latency
-    await new Promise(r=> setTimeout(r, 400));
-
-    const score = computeScore(inputs);
-    const reasons = explain(inputs);
-    const pd = pdFromScore(score);
-    const rec = /** @type {ScoreRecord} */({
-      id: crypto.randomUUID(),
-      ts: Date.now(),
-      applicant: { name: inputs.name || "Unnamed", email: inputs.email || "" },
-      inputs,
-      score,
-      pd,
-      band: toBand(score),
-      reasons,
-    });
-    const next = [rec, ...records].slice(0, 50);
-    setRecords(next);
-    saveRecords(next);
-    setLoading(false);
+  
+  const creditScore = 742;
+  
+  const getScoreColor = (score) => {
+    if (score >= 800) return '#10b981';
+    if (score >= 740) return '#3b82f6';
+    if (score >= 670) return '#f59e0b';
+    if (score >= 580) return '#f97316';
+    return '#ef4444';
   };
-
-  const handleClear = () => { clearRecords(); setRecords([]); };
-
-  const chartData = useMemo(()=>
-    [...records].reverse().map(r=> ({
-      ts: new Date(r.ts).toLocaleTimeString(),
-      score: r.score,
-      pd: +(r.pd*100).toFixed(2)
-    })),
-    [records]
-  );
-
+  
+  const getScoreLabel = (score) => {
+    if (score >= 800) return 'Excellent';
+    if (score >= 740) return 'Very Good';
+    if (score >= 670) return 'Good';
+    if (score >= 580) return 'Fair';
+    return 'Poor';
+  };
+  
+  const handleInputChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log('Form submitted:', formData);
+    // Handle form submission
+  };
+  
+  const scoreColor = getScoreColor(creditScore);
+  const scoreLabel = getScoreLabel(creditScore);
+  const scorePercentage = (creditScore / 850) * 100;
+  
+  const navItems = [
+    { icon: CreditCard,label: 'Dashboard', href: 'dashboard'},
+    { icon: CreditCard, label: 'Accounts', href: 'accounts' },
+    { icon: History, label: 'History', href: 'history' },
+    { icon: DollarSign, label: 'Loan Portal', href: 'loans' },
+    { icon: User, label: 'Profile', href: 'profile' },
+    { icon: FileText, label: 'Terms & Privacy', href: 'terms' },
+    { icon: BookOpen, label: 'Resources', href: 'resources' },
+    { icon: HelpCircle, label: 'Support', href: 'support' }
+  ];
+  
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Credit Scoring Dashboard</h1>
-            <p className="text-sm text-slate-600">UI/UX prototype • Borrower input → AI score → SHAP-style reasons → Local DB → Visualization</p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleClear} className="px-3 py-2 rounded-xl bg-white border text-slate-700 hover:bg-slate-100">Clear History</button>
-          </div>
-        </header>
-
-        {/* Grid: Inputs + Results */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Inputs Card */}
-          <section className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
-            <h2 className="font-semibold">Borrower Inputs</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="col-span-2 text-sm">Full Name
-                <input value={inputs.name} onChange={e=>onChange("name", e.target.value)} className="mt-1 w-full rounded-lg border p-2" placeholder="Jane Doe" />
-              </label>
-              <label className="col-span-2 text-sm">Email (optional)
-                <input value={inputs.email} onChange={e=>onChange("email", e.target.value)} className="mt-1 w-full rounded-lg border p-2" placeholder="jane@example.com" />
-              </label>
-              <label className="text-sm">Monthly Income ($)
-                <input type="number" value={inputs.income} onChange={e=>onChange("income", Number(e.target.value))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Monthly Expenses ($)
-                <input type="number" value={inputs.expenses} onChange={e=>onChange("expenses", Number(e.target.value))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Existing Debt ($)
-                <input type="number" value={inputs.debt} onChange={e=>onChange("debt", Number(e.target.value))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Credit Utilization (0–1)
-                <input type="number" step="0.01" value={inputs.util} onChange={e=>onChange("util", clamp(Number(e.target.value),0,1))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Late Payments (last 3m)
-                <input type="number" value={inputs.late3m} onChange={e=>onChange("late3m", Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Employment Length (years)
-                <input type="number" step="0.5" value={inputs.empYears} onChange={e=>onChange("empYears", Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Savings Rate (0–1)
-                <input type="number" step="0.01" value={inputs.savingsRate} onChange={e=>onChange("savingsRate", clamp(Number(e.target.value),0,1))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Balance Volatility (0–1)
-                <input type="number" step="0.01" value={inputs.balanceVol} onChange={e=>onChange("balanceVol", clamp(Number(e.target.value),0,1))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Loan Amount ($)
-                <input type="number" value={inputs.loanAmount} onChange={e=>onChange("loanAmount", Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
-              <label className="text-sm">Tenor (months)
-                <input type="number" value={inputs.tenorMonths} onChange={e=>onChange("tenorMonths", Math.max(1, Number(e.target.value)))} className="mt-1 w-full rounded-lg border p-2" />
-              </label>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Navigation Bar */}
+      <nav className="bg-white shadow-sm border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <h1 className="text-2xl font-bold text-slate-800">CreditView</h1>
+              </div>
             </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <div className="text-sm text-slate-600">DTI ≈ <b>{(dti*100).toFixed(1)}%</b></div>
-              <button onClick={handleScore} disabled={loading} className={`px-4 py-2 rounded-xl text-white ${loading?"bg-slate-400":"bg-slate-900 hover:bg-black"}`}>
-                {loading? "Scoring…" : "Score Application"}
+            
+            {/* Desktop Navigation */}
+            <div className="hidden lg:flex space-x-1">
+              {navItems.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                >
+                  <item.icon className="w-4 h-4 mr-2" />
+                  {item.label}
+                </a>
+              ))}
+            </div>
+            
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+        </div>
+        
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t border-slate-200 bg-white">
+            <div className="px-2 pt-2 pb-3 space-y-1">
+              {navItems.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className="flex items-center px-3 py-2 text-base font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                >
+                  <item.icon className="w-5 h-5 mr-3" />
+                  {item.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </nav>
+      
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-slate-800 mb-2">Credit Score Dashboard</h2>
+          <p className="text-slate-600">Enter your information to view your credit score</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Left Side - Input Form */}
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <h3 className="text-2xl font-bold text-slate-800 mb-6">Your Information</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  name="fullName"
+                  value={formData.fullName}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="John Doe"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="john@example.com"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Date of Birth
+                </label>
+                <input
+                  type="date"
+                  name="dob"
+                  value={formData.dob}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Social Security Number
+                </label>
+                <input
+                  type="text"
+                  name="ssn"
+                  value={formData.ssn}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="XXX-XX-XXXX"
+                  maxLength={11}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="123 Main St"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="New York"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    ZIP Code
+                  </label>
+                  <input
+                    type="text"
+                    name="zipCode"
+                    value={formData.zipCode}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="10001"
+                  />
+                </div>
+              </div>
+              
+              <button
+                onClick={handleSubmit}
+                className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg"
+              >
+                Update Information
               </button>
             </div>
-          </section>
-
-          {/* Results Card */}
-          <section className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
-            <h2 className="font-semibold">Decision & Explanations</h2>
-            {records.length === 0 ? (
-              <p className="text-sm text-slate-500">Run a score to see results here.</p>
-            ) : (
-              <LatestResult rec={records[0]} />
-            )}
-          </section>
-        </div>
-
-        {/* Visualization */}
-        <section className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Scores Over Time</h2>
-            <div className="text-xs text-slate-500">Stored locally in your browser</div>
           </div>
-          {records.length === 0 ? (
-            <p className="text-sm text-slate-500">No historical data yet.</p>
-          ) : (
-            <div className="w-full h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{top:10,right:20,left:0,bottom:10}}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="ts" tick={{fontSize:12}} />
-                  <YAxis yAxisId="left" tick={{fontSize:12}} domain={[300,850]} />
-                  <YAxis yAxisId="right" orientation="right" tick={{fontSize:12}} />
-                  <Tooltip />
-                  <Line yAxisId="left" type="monotone" dataKey="score" strokeWidth={2} dot={false} />
-                  <Line yAxisId="right" type="monotone" dataKey="pd" strokeWidth={2} strokeDasharray="4 2" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+          
+          {/* Right Side - Credit Score Display */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12">
+            <div className="flex flex-col items-center">
+              {/* Circular Progress */}
+              <div className="relative w-64 h-64 mb-6">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  {/* Background circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke="#e2e8f0"
+                    strokeWidth="8"
+                  />
+                  {/* Progress circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke={scoreColor}
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray={`${scorePercentage * 2.51327} 251.327`}
+                    style={{ transition: 'stroke-dasharray 1s ease-in-out' }}
+                  />
+                </svg>
+                
+                {/* Score text */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="text-6xl font-bold text-slate-800">{creditScore}</div>
+                  <div className="text-sm text-slate-500 mt-1">out of 850</div>
+                </div>
+              </div>
+              
+              {/* Score label */}
+              <div className="mb-8">
+                <span 
+                  className="inline-block px-6 py-2 rounded-full text-white font-semibold text-lg"
+                  style={{ backgroundColor: scoreColor }}
+                >
+                  {scoreLabel}
+                </span>
+              </div>
+              
+              {/* Score range indicators */}
+              <div className="w-full max-w-md mb-8">
+                <div className="flex justify-between text-xs text-slate-600 mb-2">
+                  <span>Poor</span>
+                  <span>Fair</span>
+                  <span>Good</span>
+                  <span>Very Good</span>
+                  <span>Excellent</span>
+                </div>
+                <div className="h-2 bg-gradient-to-r from-red-500 via-yellow-500 via-blue-500 to-green-500 rounded-full"></div>
+                <div className="flex justify-between text-xs text-slate-500 mt-1">
+                  <span>300</span>
+                  <span>850</span>
+                </div>
+              </div>
+              
+              {/* CTA Button */}
+              <button
+                onClick={() => window.location.href = '#analysis'}
+                className="px-8 py-4 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg transform hover:-translate-y-0.5"
+              >
+                View Score Analysis & Insights
+              </button>
             </div>
-          )}
-
-          {/* History table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  <th className="py-2">Time</th>
-                  <th>Applicant</th>
-                  <th>Score</th>
-                  <th>PD</th>
-                  <th>Band</th>
-                  <th>Top Reasons</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map(r=> (
-                  <tr key={r.id} className="border-t">
-                    <td className="py-2">{new Date(r.ts).toLocaleString()}</td>
-                    <td>{r.applicant.name}</td>
-                    <td>{r.score}</td>
-                    <td>{fmtPct(r.pd)}</td>
-                    <td><Pill tone={r.band<="C"?"good":"neutral"}>{r.band}</Pill></td>
-                    <td className="max-w-[420px]">
-                      <div className="flex flex-wrap gap-2">
-                        {r.reasons.map((m,i)=> (
-                          <Pill key={i} tone={m.direction === "+" ? "good" : "bad"}>
-                            {m.direction === "+" ? "+" : "-"}{Math.abs(m.delta)} · {m.label}
-                          </Pill>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
-        </section>
-
-        {/* Footer note */}
-        <p className="text-xs text-slate-500 text-center">Prototype for UI/UX demonstration only. Scores and explanations are illustrative and not financial advice.</p>
-      </div>
-    </div>
-  );
-}
-
-function LatestResult({ rec }){
-  return (
-    <div className="space-y-3">
-      <div className="flex items-end gap-4">
-        <div>
-          <div className="text-4xl font-extrabold leading-none">{rec.score}</div>
-          <div className="text-slate-500 text-sm">Credit Score • Band <b>{rec.band}</b></div>
         </div>
-        <div className="ml-auto text-right">
-          <div className="text-sm">PD (12m): <b>{(rec.pd*100).toFixed(1)}%</b></div>
-          <div className="text-xs text-slate-500">{new Date(rec.ts).toLocaleString()}</div>
+        
+        {/* Quick Stats - Full Width Below */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="text-slate-600 text-sm mb-1">Payment History</div>
+            <div className="text-2xl font-bold text-green-600">Excellent</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="text-slate-600 text-sm mb-1">Credit Utilization</div>
+            <div className="text-2xl font-bold text-blue-600">23%</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="text-slate-600 text-sm mb-1">Total Accounts</div>
+            <div className="text-2xl font-bold text-slate-700">8</div>
+          </div>
         </div>
-      </div>
-      <div>
-        <h3 className="text-sm font-semibold mb-1">Top Factors</h3>
-        <div className="flex flex-wrap gap-2">
-          {rec.reasons.map((m,i)=> (
-            <Pill key={i} tone={m.direction === "+" ? "good" : "bad"}>
-              {m.direction === "+" ? "+" : "-"}{Math.abs(m.delta)} · {m.label}
-            </Pill>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="bg-slate-50 rounded-xl p-3 border">
-          <div className="text-slate-500">Applicant</div>
-          <div className="font-medium">{rec.applicant.name}</div>
-        </div>
-        <div className="bg-slate-50 rounded-xl p-3 border">
-          <div className="text-slate-500">Loan Request</div>
-          <div className="font-medium">${rec.inputs.loanAmount.toLocaleString()} • {rec.inputs.tenorMonths} mo</div>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
