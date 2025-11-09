@@ -75,7 +75,16 @@ export default function CreditScoreDashboard() {
   
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Form submitted:', formData);
+    let dataInJson = {
+      "monthlyIncome": String(formData.monthlyIncome),
+      "takeHomePay": String(formData.takeHomePay),
+      "housingCost": String(formData.housingCost),
+      "otherExpenses": String(formData.otherExpenses),
+      "occupation": String(formData.occupation),
+      "employmentTenure": String(formData.employmentTenure),
+      "educationLevel": String(formData.educationLevel),
+    }
+    console.log(dataInJson);
     // Handle form submission
   };
   
