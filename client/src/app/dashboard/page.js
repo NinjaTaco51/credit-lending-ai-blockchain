@@ -73,20 +73,71 @@ export default function CreditScoreDashboard() {
     }
   };
   
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    let dataInJson = {
-      "monthlyIncome": String(formData.monthlyIncome),
-      "takeHomePay": String(formData.takeHomePay),
-      "housingCost": String(formData.housingCost),
-      "otherExpenses": String(formData.otherExpenses),
-      "occupation": String(formData.occupation),
-      "employmentTenure": String(formData.employmentTenure),
-      "educationLevel": String(formData.educationLevel),
-    }
-    console.log(dataInJson);
-    // Handle form submission
+const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  const birthDate = new Date(formData.dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+
+  // Adjust if the birthday hasn't occurred yet this year
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+
+  // Map keys to display names
+  const loanLabels = {
+    mortgage: "Mortgage Loan",
+    auto: "Auto Loan",
+    student: "Student Loan",
+    personal: "Personal Loan",
+    creditCard: "Credit Card Loan",
+    other: "Other Loan"
   };
+
+  const loans = []
+
+  for (const loan in formData.loanTypes) {
+    loans.push(loanLabels[loan])
+  }
+
+  const dataInJson = {
+    "income_monthly": Number(formData.monthlyIncome),
+    "housing_cost_monthly": Number(formData.housingCost),
+    "employment_role": String(formData.occupation),
+    "years_at_job": Number(formData.employmentTenure),
+    "loans": loans,
+    age,
+  };
+
+  console.log("Sending payload:", dataInJson);
+
+  try {
+    const response = await fetch("http://127.0.0.1:8080/score", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(dataInJson),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Server error:", errorData);
+      alert(`Error: ${errorData.error}`);
+      return;
+    }
+
+    const result = await response.json();
+    console.log("Prediction result:", result);
+    alert(`Prediction result: ${JSON.stringify(result)}`);
+
+  } catch (error) {
+    console.error("Request failed:", error);
+    alert("An unexpected error occurred while sending data to the server.");
+  }
+};
   
   const scoreColor = getScoreColor(creditScore);
   const scoreLabel = getScoreLabel(creditScore);
