@@ -5,6 +5,10 @@ import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, 
 
 export default function CreditScoreDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [creditScore, setCreditScore] = useState(0);
+  const [reasons, setReasons] = useState([]);
+  const [showScore, setShowScore] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -23,14 +27,14 @@ export default function CreditScoreDashboard() {
       student: false,
       personal: false,
       creditCard: false,
+      creditBuilder: false,
+      payDay: false,
       other: false
     },
     consentCredit: false,
     consentTerms: false,
     consentMarketing: false
   });
-  
-  const creditScore = 742;
   
   const getScoreColor = (score) => {
     if (score >= 800) return '#10b981';
@@ -73,71 +77,82 @@ export default function CreditScoreDashboard() {
     }
   };
   
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
 
-  const birthDate = new Date(formData.dob);
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
+    const birthDate = new Date(formData.dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
 
-  // Adjust if the birthday hasn't occurred yet this year
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-
-  // Map keys to display names
-  const loanLabels = {
-    mortgage: "Mortgage Loan",
-    auto: "Auto Loan",
-    student: "Student Loan",
-    personal: "Personal Loan",
-    creditCard: "Credit Card Loan",
-    other: "Other Loan"
-  };
-
-  const loans = []
-
-  for (const loan in formData.loanTypes) {
-    loans.push(loanLabels[loan])
-  }
-
-  const dataInJson = {
-    "income_monthly": Number(formData.monthlyIncome),
-    "housing_cost_monthly": Number(formData.housingCost),
-    "employment_role": String(formData.occupation),
-    "years_at_job": Number(formData.employmentTenure),
-    "loans": loans,
-    age,
-  };
-
-  console.log("Sending payload:", dataInJson);
-
-  try {
-    const response = await fetch("http://127.0.0.1:8080/score", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(dataInJson),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Server error:", errorData);
-      alert(`Error: ${errorData.error}`);
-      return;
+    // Adjust if the birthday hasn't occurred yet this year
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
     }
 
-    const result = await response.json();
-    console.log("Prediction result:", result);
-    alert(`Prediction result: ${JSON.stringify(result)}`);
+    // Map keys to display names
+    const loanLabels = {
+      mortgage: "Mortgage Loan",
+      auto: "Auto Loan",
+      student: "Student Loan",
+      personal: "Personal Loan",
+      creditCard: "Credit Card Loan",
+      creditBuilder: "Credit-Builder Loan",
+      payDay: "Payday Loan",
+      other: "Other Loan"
+    };
 
-  } catch (error) {
-    console.error("Request failed:", error);
-    alert("An unexpected error occurred while sending data to the server.");
-  }
-};
+    const loans = Object.entries(formData.loanTypes)
+      .filter(([, checked]) => checked)
+      .map(([key]) => loanLabels[key]);
+
+    const dataInJson = {
+      "income_monthly": Number(formData.monthlyIncome),
+      "housing_cost_monthly": Number(formData.housingCost),
+      "other_expenses_monthly": Number(formData.otherExpenses),
+      "employment_role": String(formData.occupation),
+      "years_at_job": Number(formData.employmentTenure),
+      "loans": loans,
+      age,
+    };
+
+    console.log("Sending payload:", dataInJson);
+
+    try {
+      const response = await fetch("http://127.0.0.1:8080/score", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(dataInJson),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Server error:", errorData);
+        alert(`Error: ${errorData.error}`);
+        setIsLoading(false);
+        return;
+      }
+
+      const result = await response.json();
+      console.log(result);
+      console.log(result.credit_score);
+      console.log(result.band);
+      console.log(result.reasons);
+      
+      setCreditScore(Number(result.credit_score));
+      setReasons(result.reasons || []);
+      setShowScore(true);
+      setIsLoading(false);
+
+    } catch (error) {
+      console.error("Request failed:", error);
+      alert("An unexpected error occurred while sending data to the server.");
+      setIsLoading(false);
+    }
+  };
   
   const scoreColor = getScoreColor(creditScore);
   const scoreLabel = getScoreLabel(creditScore);
@@ -299,25 +314,6 @@ const handleSubmit = async (e) => {
                     onChange={handleInputChange}
                     className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="5000"
-                    required
-                  />
-                </div>
-              </div>
-              
-              {/* Take Home Pay */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Take Home Pay (Net) <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-2.5 text-slate-500">$</span>
-                  <input
-                    type="number"
-                    name="takeHomePay"
-                    value={formData.takeHomePay}
-                    onChange={handleInputChange}
-                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="3800"
                     required
                   />
                 </div>
@@ -490,6 +486,26 @@ const handleSubmit = async (e) => {
                   <label className="flex items-center">
                     <input
                       type="checkbox"
+                      name="creditBuilder"
+                      checked={formData.loanTypes.creditBuilder}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Credit Builder</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="payDay"
+                      checked={formData.loanTypes.payDay}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Payday</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
                       name="other"
                       checked={formData.loanTypes.other}
                       onChange={handleCheckboxChange}
@@ -549,101 +565,127 @@ const handleSubmit = async (e) => {
               
               <button
                 onClick={handleSubmit}
-                className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg"
+                disabled={isLoading}
+                className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Submit Information
+                {isLoading ? 'Processing...' : 'Submit Information'}
               </button>
             </div>
           </div>
           
           {/* Right Side - Credit Score Display */}
           <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12">
-            <div className="flex flex-col items-center">
-              {/* Circular Progress */}
-              <div className="relative w-64 h-64 mb-6">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  {/* Background circle */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    fill="none"
-                    stroke="#e2e8f0"
-                    strokeWidth="8"
-                  />
-                  {/* Progress circle */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    fill="none"
-                    stroke={scoreColor}
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray={`${scorePercentage * 2.51327} 251.327`}
-                    style={{ transition: 'stroke-dasharray 1s ease-in-out' }}
-                  />
-                </svg>
+            {!showScore ? (
+              <div className="flex flex-col items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-slate-100 flex items-center justify-center">
+                    <CreditCard className="w-16 h-16 text-slate-400" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-slate-800 mb-4">Your Credit Score Will Appear Here</h3>
+                  <p className="text-slate-600 max-w-md">
+                    Fill out the form on the left and submit your information to view your credit score and detailed analysis.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                {/* Circular Progress */}
+                <div className="relative w-64 h-64 mb-6">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    {/* Background circle */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke="#e2e8f0"
+                      strokeWidth="8"
+                    />
+                    {/* Progress circle */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke={scoreColor}
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={`${scorePercentage * 2.51327} 251.327`}
+                      style={{ transition: 'stroke-dasharray 1s ease-in-out' }}
+                    />
+                  </svg>
+                  
+                  {/* Score text */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <div className="text-6xl font-bold text-slate-800">{creditScore}</div>
+                    <div className="text-sm text-slate-500 mt-1">out of 850</div>
+                  </div>
+                </div>
                 
-                {/* Score text */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <div className="text-6xl font-bold text-slate-800">{creditScore}</div>
-                  <div className="text-sm text-slate-500 mt-1">out of 850</div>
+                {/* Score label */}
+                <div className="mb-8">
+                  <span 
+                    className="inline-block px-6 py-2 rounded-full text-white font-semibold text-lg"
+                    style={{ backgroundColor: scoreColor }}
+                  >
+                    {scoreLabel}
+                  </span>
                 </div>
-              </div>
-              
-              {/* Score label */}
-              <div className="mb-8">
-                <span 
-                  className="inline-block px-6 py-2 rounded-full text-white font-semibold text-lg"
-                  style={{ backgroundColor: scoreColor }}
-                >
-                  {scoreLabel}
-                </span>
-              </div>
-              
-              {/* Score range indicators */}
-              <div className="w-full max-w-md mb-8">
-                <div className="flex justify-between text-xs text-slate-600 mb-2">
-                  <span>Poor</span>
-                  <span>Fair</span>
-                  <span>Good</span>
-                  <span>Very Good</span>
-                  <span>Excellent</span>
+                
+                {/* Score range indicators */}
+                <div className="w-full max-w-md mb-8">
+                  <div className="flex justify-between text-xs text-slate-600 mb-2">
+                    <span>Poor</span>
+                    <span>Fair</span>
+                    <span>Good</span>
+                    <span>Very Good</span>
+                    <span>Excellent</span>
+                  </div>
+                  <div className="h-2 bg-gradient-to-r from-red-500 via-yellow-500 via-blue-500 to-green-500 rounded-full"></div>
+                  <div className="flex justify-between text-xs text-slate-500 mt-1">
+                    <span>300</span>
+                    <span>850</span>
+                  </div>
                 </div>
-                <div className="h-2 bg-gradient-to-r from-red-500 via-yellow-500 via-blue-500 to-green-500 rounded-full"></div>
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>300</span>
-                  <span>850</span>
-                </div>
+                
+                {/* Score Reasons */}
+                {reasons.length > 0 && (
+                  <div className="w-full max-w-md">
+                    <h4 className="text-lg font-semibold text-slate-800 mb-3">Key Factors</h4>
+                    <div className="space-y-2">
+                      {reasons.map((reason, index) => (
+                        <div key={index} className="flex items-start bg-slate-50 rounded-lg p-3">
+                          <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-semibold mr-3 mt-0.5">
+                            {index + 1}
+                          </div>
+                          <p className="text-sm text-slate-700">{reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              
-              {/* CTA Button */}
-              <button
-                onClick={() => window.location.href = '#analysis'}
-                className="px-8 py-4 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg transform hover:-translate-y-0.5"
-              >
-                View Score Analysis & Insights
-              </button>
-            </div>
+            )}
           </div>
         </div>
         
         {/* Quick Stats - Full Width Below */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="text-slate-600 text-sm mb-1">Payment History</div>
-            <div className="text-2xl font-bold text-green-600">Excellent</div>
+        {showScore && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+            <div className="bg-white rounded-lg shadow p-6 text-center">
+              <div className="text-slate-600 text-sm mb-1">Payment History</div>
+              <div className="text-2xl font-bold text-green-600">Excellent</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 text-center">
+              <div className="text-slate-600 text-sm mb-1">Credit Utilization</div>
+              <div className="text-2xl font-bold text-blue-600">23%</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 text-center">
+              <div className="text-slate-600 text-sm mb-1">Total Accounts</div>
+              <div className="text-2xl font-bold text-slate-700">8</div>
+            </div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="text-slate-600 text-sm mb-1">Credit Utilization</div>
-            <div className="text-2xl font-bold text-blue-600">23%</div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="text-slate-600 text-sm mb-1">Total Accounts</div>
-            <div className="text-2xl font-bold text-slate-700">8</div>
-          </div>
-        </div>
+        )}
       </main>
     </div>
   );
