@@ -120,7 +120,7 @@ export default function CreditScoreDashboard() {
     console.log("Sending payload:", dataInJson);
 
     try {
-      const response = await fetch("http://127.0.0.1:8080/score", {
+      const response = await fetch("http://0.0.0.0:8080/score", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -137,6 +137,7 @@ export default function CreditScoreDashboard() {
       }
 
       const result = await response.json();
+      console.log("result")
       console.log(result);
       console.log(result.credit_score);
       console.log(result.band);
