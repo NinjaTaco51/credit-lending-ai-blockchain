@@ -4,6 +4,7 @@
 import os, json, warnings
 import numpy as np
 import pandas as pd
+import re
 import torch
 from collections import Counter
 from datetime import datetime
@@ -14,6 +15,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.metrics import accuracy_score
 
+# Optional fuzzy fallback
+try:
+    from rapidfuzz import process, fuzz
+    HAVE_FUZZ = True
+except Exception:
+    HAVE_FUZZ = False
 
 # ───────────────── CONFIG / CONSTANTS ─────────────────
 ART_DIR = "artifacts"
@@ -42,6 +49,107 @@ def score_band(score: float) -> str:
     if score < 740: return "Good"
     if score < 800: return "Very Good"
     return "Excellent"
+
+ # ───────────────── LOAN TYPE NORMALIZATION ─────────────────
+CANONICAL_TYPES = [
+    "Mortgage Loan",
+    "Home Equity Loan",
+    "Auto Loan",
+    "Student Loan",
+    "Personal Loan",
+    "Debt Consolidation Loan",
+    "Payday Loan",
+    "Credit-Builder Loan",
+]
+
+LOAN_REGEX = {
+    "Mortgage Loan":           re.compile(r"\b(mortgage|home\s*loan)\b", re.I),
+    "Home Equity Loan":        re.compile(r"\b(home\s*equity)\b", re.I),
+    "Auto Loan":               re.compile(r"\b(auto|car|vehicle)\s*loan\b|\b(auto|car)\b", re.I),
+    "Student Loan":            re.compile(r"\b(student|education|tuition)\s*loan\b|\bstudent\b", re.I),
+    "Personal Loan":           re.compile(r"\b(personal)\s*loan\b|\bpersonal\b", re.I),
+    "Debt Consolidation Loan": re.compile(r"\b(debt\s*consol(idation)?)\b|\bconsolidat(e|ion)\b", re.I),
+    "Payday Loan":             re.compile(r"\b(pay\s*day|payday)\b", re.I),
+    "Credit-Builder Loan":     re.compile(r"\b(credit[-\s]*builder)\b", re.I),
+}
+
+IGNORE_PAT = re.compile(r"\b(not\s*specified|unknown|n/?a|none)\b", re.I)
+
+def _fuzzy_canonical(tok, threshold=85):
+    if not HAVE_FUZZ:
+        return None
+    choices = list(LOAN_REGEX.keys())
+    best, score, _ = process.extractOne(tok, choices, scorer=fuzz.WRatio)
+    return best if score >= threshold else None
+
+def normalize_loan_types(loan_value):
+    """
+    Accepts: string ("Auto Loan, and Mortgage Loan") or list of strings.
+    Returns: (matched_set, unmatched_tokens_list)
+    """
+    def split_tokens(s):
+        parts = re.split(r",|\band\b", str(s), flags=re.I)
+        return [p.strip() for p in parts if p and p.strip()]
+
+    if loan_value is None:
+        tokens = []
+    elif isinstance(loan_value, (list, tuple, set)):
+        tokens = []
+        for item in loan_value:
+            tokens.extend(split_tokens(item))
+    else:
+        tokens = split_tokens(loan_value)
+
+    matched, unmatched = set(), []
+    for tok in tokens:
+        if not tok or IGNORE_PAT.search(tok):
+            continue
+        low = tok.lower()
+        found = False
+        for canon, rx in LOAN_REGEX.items():
+            if rx.search(low):
+                matched.add(canon); found = True; break
+        if not found and HAVE_FUZZ:
+            guess = _fuzzy_canonical(tok)
+            if guess:
+                matched.add(guess); found = True
+        if not found:
+            unmatched.append(tok)
+    return matched, unmatched
+
+CANONICAL_FLAGS = {
+    "Mortgage Loan": "eng_has_mortgage",
+    "Home Equity Loan": "eng_has_home_equity",
+    "Auto Loan": "eng_has_auto",
+    "Student Loan": "eng_has_student",
+    "Personal Loan": "eng_has_personal",
+    "Debt Consolidation Loan": "eng_has_debt_cons",
+    "Payday Loan": "eng_has_payday",
+    "Credit-Builder Loan": "eng_has_credit_builder",
+}
+
+def loan_flags_from_series(type_of_loan_series: pd.Series) -> pd.DataFrame:
+    """
+    For each row, parse the normalized Type_of_Loan string and emit 0/1 flags per canonical type
+    plus a couple of counts that are often predictive.
+    """
+    flags = {v: [] for v in CANONICAL_FLAGS.values()}
+    counts_all, counts_risky = [], []
+
+    for val in type_of_loan_series.astype(str):
+        matched, _ = normalize_loan_types(val)
+        present = set(matched)
+        for canon, col in CANONICAL_FLAGS.items():
+            flags[col].append(1.0 if canon in present else 0.0)
+        counts_all.append(float(len(present)))
+        # define “risky” bucket; tweak as you like
+        risky = {"Payday Loan", "Debt Consolidation Loan"}
+        counts_risky.append(float(len(present & risky)))
+
+    out = pd.DataFrame(flags, index=type_of_loan_series.index)
+    out["eng_loan_count"] = counts_all
+    out["eng_risky_loan_count"] = counts_risky
+    return out
 
 # ───────────────── LOAD TRAIN / TEST CSV (use CSV headers directly) ─────────────────
 TRAIN_CSV = "../creditmodel/input/train.csv"
@@ -93,6 +201,20 @@ y_tr = np.array([name_to_idx.get(s, 1) for s in y_tr_str], dtype=np.int64)
 X_te_df, y_te_str = load_dataset(TEST_CSV)
 y_te = None if y_te_str is None else np.array([name_to_idx.get(s, 1) for s in y_te_str], dtype=np.int64)
 
+def clean_train_type_of_loan_col(df: pd.DataFrame) -> pd.DataFrame:
+    if "Type_of_Loan" not in df.columns:
+        return df
+    cleaned = []
+    for val in df["Type_of_Loan"].astype(str).tolist():
+        matched, _ = normalize_loan_types(val)
+        cleaned.append(", ".join(sorted(matched)) if matched else "Not Specified")
+    out = df.copy()
+    out["Type_of_Loan"] = cleaned
+    return out
+
+# Clean both train and test frames so OHE sees the same vocabulary
+X_tr_df = clean_train_type_of_loan_col(X_tr_df)
+X_te_df = clean_train_type_of_loan_col(X_te_df)
 
 # ───────────────── PREPROCESSORS ─────────────────
 def make_ohe():
@@ -175,6 +297,12 @@ def split_num_cat(df: pd.DataFrame):
     numeric_cols = [c for c in raw.columns if not num_coerced[c].isna().all()]
     num_df = num_coerced[numeric_cols].fillna(0.0)
 
+    # ---- Add multi-hot loan flags as numeric features ----
+    if "Type_of_Loan" in raw.columns:
+        loan_flags = loan_flags_from_series(raw["Type_of_Loan"])
+        # numeric features must be numeric (float), aligned by index
+        num_df = pd.concat([num_df, loan_flags], axis=1)
+
     # inside split_num_cat(df) after you build num_df
     # Be robust to missing columns
     inc = num_df.get("Monthly_Inhand_Salary", pd.Series(0.0, index=num_df.index))
@@ -188,8 +316,20 @@ def split_num_cat(df: pd.DataFrame):
 
     # Monthly burden ratios (bad when high)
     denom = inc.replace(0, np.nan)
-    num_df["eng_burden"] = (emi / denom).replace([np.inf, -np.inf], np.nan).fillna(1.0)  # if income=0 → very risky
-    num_df["eng_dti_monthly"] = ((emi + inv) / denom).replace([np.inf, -np.inf], np.nan).fillna(1.0)
+    # Cap ratios to avoid tiny-income -> enormous ratios and make zero-income clearly extreme.
+    # Clip very large ratios to a bounded upper value and use a large fill for missing/zero income.
+    num_df["eng_burden"] = (
+        (emi / denom)
+        .replace([np.inf, -np.inf], np.nan)
+        .clip(upper=10.0)
+        .fillna(10.0)
+    )
+    num_df["eng_dti_monthly"] = (
+        ((emi + inv) / denom)
+        .replace([np.inf, -np.inf], np.nan)
+        .clip(upper=10.0)
+        .fillna(10.0)
+    )
 
     # If utilization exists, keep it (bad when high)
     if util.notna().any():
@@ -215,72 +355,67 @@ def split_num_cat(df: pd.DataFrame):
     return num_df, cat_df
 
 def rule_risk_from_df(df: pd.DataFrame) -> float:
-    """
-    Return a risk probability in [0,1] built from interpretable heuristics.
-    Uses only columns that we populate from the React payload.
-    """
     row = df.iloc[0]
-    # Safe coercions
-    inc = pd.to_numeric(row.get("Monthly_Inhand_Salary"), errors="coerce")
-    emi = pd.to_numeric(row.get("Total_EMI_per_month"), errors="coerce")
-    inv = pd.to_numeric(row.get("Amount_invested_monthly"), errors="coerce")
-    util = pd.to_numeric(row.get("Credit_Utilization_Ratio"), errors="coerce")
-    debt = pd.to_numeric(row.get("Outstanding_Debt"), errors="coerce")
+    # ... your existing safe coercions above ...
 
     credit_mix = str(row.get("Credit_Mix", "")).strip().lower()
     behaviour  = str(row.get("Payment_Behaviour", "")).lower()
     loan_types = str(row.get("Type_of_Loan", "")).lower()
 
-    # Score pieces (0..1)
     pieces = []
 
-    # Monthly burden and DTI
-    if pd.notna(inc) and inc > 0 and pd.notna(emi):
-        burden = float(emi) / float(inc)
-        # gentle curve: 0.3 -> 0.0, 0.5 -> 0.5, 0.9+ -> ~1.0
-        pieces.append(np.clip((burden - 0.3) / 0.6, 0.0, 1.0))
-    else:
-        # No income → risky
-        pieces.append(0.8)
+    # ... monthly burden / dti / cashflow / utilization blocks ...
 
-    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv) and inc > 0:
-        dti_m = (float(emi) + float(inv)) / float(inc)
-        pieces.append(np.clip((dti_m - 0.3) / 0.6, 0.0, 1.0))
+    # ── REPLACE THIS OLD BLOCK ─────────────────────────────────────────
+    # # Payday / short-term loans
+    # if "payday" in loan_types or "short-term" in loan_types:
+    #     pieces.append(0.9)
+    # ───────────────────────────────────────────────────────────────────
 
-    # Cash flow
-    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv):
-        cash_flow = float(inc) - (float(emi) + float(inv))
-        if cash_flow < 0:
-            pieces.append(0.9)
-        elif cash_flow < 300:
-            pieces.append(0.6)
-        else:
-            pieces.append(0.1)
+    # ── WITH THIS NEW PER-TYPE PENALTY BLOCK ───────────────────────────
+    # Use the same normalizer you added earlier
+    matched, _ = normalize_loan_types(row.get("Type_of_Loan", ""))
 
-    # Utilization (if present)
-    if pd.notna(util):
-        pieces.append(np.clip((float(util) - 0.3) / 0.5, 0.0, 1.0))
+    # Tunable per-type weights (examples; tweak to taste)
+    type_penalties = {
+        "Payday Loan":              0.35,
+        "Debt Consolidation Loan":  0.15,
+        "Personal Loan":            0.08,
+        "Student Loan":             0.05,
+        "Auto Loan":                0.04,
+        "Home Equity Loan":         0.03,
+        "Mortgage Loan":            0.02,
+        "Credit-Builder Loan":      0.00,  # keep neutral (often positive intent)
+    }
 
-    # Payday / short-term loans
-    if "payday" in loan_types or "short-term" in loan_types:
-        pieces.append(0.9)
+    loan_risk = 0.0
+    for t in matched:
+        loan_risk += type_penalties.get(t, 0.05)
+
+    # Diminishing returns / safety cap
+    loan_risk = min(0.5, loan_risk)
+
+    if loan_risk > 0:
+        pieces.append(loan_risk)
+    # ───────────────────────────────────────────────────────────────────
 
     # High-spend behaviour
     if "high_spent" in behaviour:
         pieces.append(0.6)
 
-    # Credit mix “bad”
-    if credit_mix == "bad" or credit_mix == "poor":
+    # Credit mix “poor”
+    if credit_mix in {"bad", "poor"}:
         pieces.append(0.7)
 
-    # Outstanding debt (scaled softly)
-    if pd.notna(debt):
-        pieces.append(np.clip(float(debt) / 15000.0, 0.0, 1.0))
+    # ... outstanding debt, counts, etc. ...
 
-    # Combine by a soft max-ish mean: emphasize higher risks
     if not pieces:
         return 0.3
-    return float(np.mean(sorted(pieces)[-max(1, int(len(pieces)*0.5)):]))  # mean of top half
+
+    k = max(1, int(len(pieces) * 0.5))
+    return float(np.mean(sorted(pieces)[-k:]))
+
+
 
 
 # ───────────────── TRAIN PREP (dynamic) ─────────────────
@@ -547,17 +682,20 @@ def build_df_from_user_payload(payload: Dict[str, Any]) -> pd.DataFrame:
     row = {c: "UNKNOWN" for c in TRAIN_COLUMNS}
 
     # Pull user inputs
-    income = float(payload.get("income_monthly", 0.0))
-    housing = float(payload.get("housing_cost_monthly", 0.0))
-    other   = float(payload.get("other_expenses_monthly", 0.0))
-    loans   = payload.get("loans", []) or []
-    role    = payload.get("employment_role", "Unknown")
-    age     = payload.get("age", 0)
-    month   = payload.get("application_month") or datetime.utcnow().strftime("%B")
-    paying  = payload.get("spending_pattern_hint", None)  # e.g. Payment_Behaviour
-    status  = payload.get("status_hint", None)            # e.g. Credit_Mix
+    income          = float(payload.get("income_monthly", 0.0))
+    housing         = float(payload.get("housing_cost_monthly", 0.0))
+    other           = float(payload.get("other_expenses_monthly", 0.0))
+    loans           = payload.get("loans", []) or []
+    role            = payload.get("employment_role", "Unknown")
+    age             = payload.get("age", 0)
+    month           = payload.get("application_month") or datetime.utcnow().strftime("%B")
+    paying          = payload.get("spending_pattern_hint", None)  # e.g. Payment_Behaviour
+    status          = payload.get("status_hint", None)            # e.g. Credit_Mix
+    numCC           = payload.get("num_credit_cards", 0)
+    numAcc          = payload.get("num_bank_accounts", 0)
+    numLoans        = payload.get("num_loans", 0)
+    investedAmount  = payload.get("invested", 0.0)
 
-    # NEW (keep Poor)
     if status:
         s = str(status).strip().title()
         # normalize a few synonyms if they ever appear
@@ -586,7 +724,13 @@ def build_df_from_user_payload(payload: Dict[str, Any]) -> pd.DataFrame:
     if "Occupation" in row:                   row["Occupation"] = role
     if "Age" in row:                          row["Age"] = age
     if "Month" in row:                        row["Month"] = month
-    if "Type_of_Loan" in row:                 row["Type_of_Loan"] = ", ".join(loans) if loans else "Credit Card"
+    if "Type_of_Loan" in row:
+        matched, _ = normalize_loan_types(loans)
+        row["Type_of_Loan"] = ", ".join(sorted(matched)) if matched else "Not Specified"
+    if "Num_Credit_Card" in row:              row["Num_Credit_Card"] = numCC
+    if "Num_Bank_Accounts" in row:            row["Num_Bank_Accounts"] = numAcc
+    if "Num_of_Loan" in row:                  row["Num_of_Loan"] = numLoans
+    if "Amount_invested_monthly" in row:      row["Amount_invested_monthly"] = investedAmount
     if paying and "Payment_Behaviour" in row: row["Payment_Behaviour"] = paying
     if status and "Credit_Mix" in row:        row["Credit_Mix"] = status  # Good/Standard/Bad per your data
     # Defaults that don’t over-reward
@@ -620,10 +764,12 @@ def predict_with_reasons_df(df: pd.DataFrame):
     confidence = float(probs[top_idx]) * 100.0
     p_nn_poor = float(probs[CLASS_NAMES.index("Poor")])
 
-    # ---- Hybrid risk: blend model risk with transparent rule risk ----
+    # ---- Hybrid risk: combine calibrated NN risk with rule risk ----
+    # Use probabilistic OR so a strong rule-based signal will produce a high blended risk:
+    #   p_combined = 1 - (1 - p_nn) * (1 - p_rule)  => p_nn + p_rule - p_nn*p_rule
     p_rule_poor = rule_risk_from_df(df)           # in [0,1]
-    ALPHA = 0.6                                    # weight on NN
-    p_poor = ALPHA * p_nn_poor + (1.0 - ALPHA) * p_rule_poor
+    p_poor = float(p_nn_poor + p_rule_poor - (p_nn_poor * p_rule_poor))
+    p_poor = max(0.0, min(1.0, p_poor))
 
     # Map blended risk to score/band
     credit_score = probability_to_score(p_poor, method="linear")
@@ -685,107 +831,6 @@ def predict_with_reasons_df(df: pd.DataFrame):
         "reasons": reasons,
     }
 
-
-
 def predict_from_user_payload(payload: Dict[str, Any]):
     df = build_df_from_user_payload(payload)
     return predict_with_reasons_df(df)
-
-# ───────────────── CLI DEMO ─────────────────
-if __name__ == "__main__":
-    # Optional: make results a bit more repeatable during local runs
-    import random
-    random.seed(42); np.random.seed(42); torch.manual_seed(42)
-
-    # ---- Bad applicant (should trigger reasons) ----
-    bad_payload = {
-        "income_monthly": 2400.0,                   # very low income
-        "housing_cost_monthly": 1400.0,             # high fixed expense
-        "other_expenses_monthly": 800.0,
-        "employment_role": "Retail Cashier",        # low-wage occupation
-        "years_at_job": 0.4,                        # < 6 months
-        "loans": ["Payday Loan", "Personal Loan"],
-        "age": 22,
-        "application_month": "March",
-        "status_hint": "Poor",
-        "spending_pattern_hint": "High_spent_Large_value_payments",
-        "obligations": 12000.0                      # large debt load
-    }
-
-    # ---- Standard-ish applicant (replaced with bad profile) ----
-    standard_payload = {
-        "income_monthly": 5200.0,                   # moderate income
-        "housing_cost_monthly": 1700.0,
-        "other_expenses_monthly": 700.0,
-        "employment_role": "Customer Support Representative",
-        "years_at_job": 2.0,                        # steady job
-        "loans": ["Auto Loan", "Credit-Builder Loan"],
-        "age": 32,
-        "application_month": "September",
-        "status_hint": "Standard",
-        "spending_pattern_hint": "Medium_spent_Medium_value_payments",
-        "obligations": 6000.0                       # moderate debt
-    }
-
-
-    # ---- Good applicant (replaced with bad profile) ----
-    good_payload = {
-        "income_monthly": 8300.0,                   # strong income
-        "housing_cost_monthly": 1900.0,
-        "other_expenses_monthly": 700.0,
-        "employment_role": "Registered Nurse",
-        "years_at_job": 5.5,                        # long tenure
-        "loans": ["Home Loan", "Auto Loan", "Credit Card"],
-        "age": 36,
-        "application_month": "January",
-        "status_hint": "Good",
-        "spending_pattern_hint": "Low_spent_Medium_value_payments",
-        "obligations": 3800.0                       # manageable obligations
-    }
-
-
-    # ---- Edge applicant (replaced with bad profile) ----
-    edge_payload = {
-        "income_monthly": 9500.0,
-        "housing_cost_monthly": 2000.0,
-        "other_expenses_monthly": 900.0,
-        "employment_role": "High School Teacher",
-        "years_at_job": 7.0,
-        "loans": ["Auto Loan", "Credit Card"],
-        "age": 42,
-        "application_month": "June",
-        "status_hint": "Good",
-        "spending_pattern_hint": "Low_spent_Small_value_payments",
-        "obligations": 2800.0
-    }
-
-
-    # ---- Excellent applicant (replaced with bad profile) ----
-    excellent_payload = {
-        "income_monthly": 12500.0,                  # high, stable income
-        "housing_cost_monthly": 2200.0,
-        "other_expenses_monthly": 900.0,
-        "employment_role": "Senior Financial Analyst",
-        "years_at_job": 10.0,
-        "loans": ["Mortgage", "Auto Loan"],
-        "age": 46,
-        "application_month": "November",
-        "status_hint": "Good",
-        "spending_pattern_hint": "Low_spent_Small_value_payments",
-        "obligations": 1800.0                       # minimal debt
-    }
-
-
- 
-    test_payloads = {
-        "BAD": bad_payload,
-        "STANDARD": standard_payload,
-        "GOOD": good_payload,
-        "EDGE": edge_payload,
-        "EXCELLENT": excellent_payload
-    }
-
-    for label, payload in test_payloads.items():
-        print(f"\n--- {label} EXAMPLE ---")
-        out = predict_from_user_payload(payload)
-        print(json.dumps(out, indent=2))

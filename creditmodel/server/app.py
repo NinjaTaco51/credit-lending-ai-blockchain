@@ -27,11 +27,14 @@ class ScoreRequest(BaseModel):
     housing_cost_monthly: float = Field(..., ge=0)
     other_expenses_monthly: float = Field(0, ge=0)
     employment_role: str
-    years_at_job: float = Field(..., ge=0)
     loans: List[str] = []
     age: float = Field(..., ge=0)
     application_month: Optional[str] = None
-
+    num_credit_cards: int = Field(..., ge=0)
+    num_bank_accounts: int = Field(..., ge=0)
+    num_loans: int = Field(..., ge=0)
+    invested: float = Field(..., ge=0)
+    
     # Optional hints (safe defaults if omitted)
     spending_pattern_hint: Optional[str] = None
     status_hint: Optional[str] = None
