@@ -18,17 +18,21 @@ export default function Dashboard() {
     takeHomePay: '',
     housingCost: '',
     otherExpenses: '',
+    invested: '',
     occupation: '',
-    employmentTenure: '',
     educationLevel: '',
+    numCreditCards: '',
+    numAccounts: '',
+    numLoans: '',
     loanTypes: {
       mortgage: false,
       auto: false,
       student: false,
       personal: false,
-      creditCard: false,
+      debtConsol: false,
       creditBuilder: false,
       payDay: false,
+      homeEquity: false,
       other: false
     },
     consentCredit: false,
@@ -91,15 +95,22 @@ export default function Dashboard() {
       age--;
     }
 
+    const monthNames = [
+      "January","February","March","April","May","June",
+      "July","August","September","October","November","December"
+    ];
+    const application_month = monthNames[today.getMonth()];
+
     // Map keys to display names
     const loanLabels = {
       mortgage: "Mortgage Loan",
       auto: "Auto Loan",
       student: "Student Loan",
       personal: "Personal Loan",
-      creditCard: "Credit Card Loan",
+      debtConsol: "Debt Consolidation Loan",
       creditBuilder: "Credit-Builder Loan",
       payDay: "Payday Loan",
+      homeEquity: "Home Equity Loan",
       other: "Other Loan"
     };
 
@@ -112,9 +123,13 @@ export default function Dashboard() {
       "housing_cost_monthly": Number(formData.housingCost),
       "other_expenses_monthly": Number(formData.otherExpenses),
       "employment_role": String(formData.occupation),
-      "years_at_job": Number(formData.employmentTenure),
       "loans": loans,
       age,
+      application_month,
+      "num_credit_cards": Number(formData.numCreditCards),
+      "num_bank_accounts": Number(formData.numAccounts),
+      "num_loans": Number(formData.numLoans),
+      "invested": Number(formData.invested),
     };
 
     console.log("Sending payload:", dataInJson);
@@ -137,7 +152,6 @@ export default function Dashboard() {
       }
 
       const result = await response.json();
-      console.log("result")
       console.log(result);
       console.log(result.credit_score);
       console.log(result.band);
@@ -149,6 +163,7 @@ export default function Dashboard() {
       setIsLoading(false);
 
     } catch (error) {
+      // Network-level failures (server down, CORS, DNS, etc.) appear here
       console.error("Request failed:", error);
       alert("An unexpected error occurred while sending data to the server.");
       setIsLoading(false);
@@ -244,7 +259,7 @@ export default function Dashboard() {
                   name="fullName"
                   value={formData.fullName}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-50"
                   placeholder="John Doe"
                   required
                 />
@@ -253,32 +268,30 @@ export default function Dashboard() {
               {/* Email Address */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Email Address <span className="text-red-500">*</span>
+                  Email Address
                 </label>
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-50"
                   placeholder="john@example.com"
-                  required
                 />
               </div>
               
               {/* Phone Number */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Phone Number <span className="text-red-500">*</span>
+                  Phone Number
                 </label>
                 <input
                   type="tel"
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-50"
                   placeholder="(555) 123-4567"
-                  required
                 />
               </div>
               
@@ -292,7 +305,7 @@ export default function Dashboard() {
                   name="dob"
                   value={formData.dob}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                   required
                 />
               </div>
@@ -309,7 +322,7 @@ export default function Dashboard() {
                     name="monthlyIncome"
                     value={formData.monthlyIncome}
                     onChange={handleInputChange}
-                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                     placeholder="5000"
                     required
                   />
@@ -328,7 +341,7 @@ export default function Dashboard() {
                     name="housingCost"
                     value={formData.housingCost}
                     onChange={handleInputChange}
-                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                     placeholder="1500"
                     required
                   />
@@ -348,13 +361,33 @@ export default function Dashboard() {
                     name="otherExpenses"
                     value={formData.otherExpenses}
                     onChange={handleInputChange}
-                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                     placeholder="800"
                     required
                   />
                 </div>
               </div>
               
+              {/* Invested Amount */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Monthly Invested Amount <span className="text-red-500">*</span>
+                  <span className="text-xs text-slate-500 block mt-1">(Investment, Savings, etc.)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-2.5 text-slate-500">$</span>
+                  <input
+                    type="number"
+                    name="invested"
+                    value={formData.invested}
+                    onChange={handleInputChange}
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                    placeholder="800"
+                    required
+                  />
+                </div>
+              </div>
+
               {/* Job / Occupation */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -364,7 +397,7 @@ export default function Dashboard() {
                   name="occupation"
                   value={formData.occupation}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                   required
                 >
                   <option value="">Select occupation</option>
@@ -384,24 +417,6 @@ export default function Dashboard() {
                 </select>
               </div>
               
-              {/* Employment Tenure */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Employment Tenure (Years) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  name="employmentTenure"
-                  value={formData.employmentTenure}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="5"
-                  min="0"
-                  step="0.5"
-                  required
-                />
-              </div>
-              
               {/* Educational Level */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -411,7 +426,7 @@ export default function Dashboard() {
                   name="educationLevel"
                   value={formData.educationLevel}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                 >
                   <option value="">Select education level</option>
                   <option value="high-school">High School</option>
@@ -424,6 +439,60 @@ export default function Dashboard() {
                 </select>
               </div>
               
+              {/* Number of Credit Card */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Number of Credit Cards <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="numCreditCards"
+                  value={formData.numCreditCards}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                  placeholder="5"
+                  min="0"
+                  step="1"
+                  required
+                />
+              </div>
+
+              {/* Number of Bank Account */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Number of Bank Accounts <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="numAccounts"
+                  value={formData.numAccounts}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                  placeholder="5"
+                  min="0"
+                  step="1"
+                  required
+                />
+              </div>
+
+              {/* Number of Loans */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Number of Current Loans <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="numLoans"
+                  value={formData.numLoans}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                  placeholder="5"
+                  min="0"
+                  step="1"
+                  required
+                />
+              </div>
+
               {/* Loan Types Held */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-3">
@@ -439,6 +508,16 @@ export default function Dashboard() {
                       className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="ml-2 text-sm text-slate-700">Mortgage</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="homeEquity"
+                      checked={formData.loanTypes.homeEquity}
+                      onChange={handleCheckboxChange}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-slate-700">Home Equity</span>
                   </label>
                   <label className="flex items-center">
                     <input
@@ -473,12 +552,12 @@ export default function Dashboard() {
                   <label className="flex items-center">
                     <input
                       type="checkbox"
-                      name="creditCard"
-                      checked={formData.loanTypes.creditCard}
+                      name="debtConsol"
+                      checked={formData.loanTypes.debtConsol}
                       onChange={handleCheckboxChange}
                       className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
                     />
-                    <span className="ml-2 text-sm text-slate-700">Credit Card</span>
+                    <span className="ml-2 text-sm text-slate-700">Debt Consolidation</span>
                   </label>
                   <label className="flex items-center">
                     <input
@@ -665,24 +744,6 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-        
-        {/* Quick Stats - Full Width Below */}
-        {showScore && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className="text-slate-600 text-sm mb-1">Payment History</div>
-              <div className="text-2xl font-bold text-green-600">Excellent</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className="text-slate-600 text-sm mb-1">Credit Utilization</div>
-              <div className="text-2xl font-bold text-blue-600">23%</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className="text-slate-600 text-sm mb-1">Total Accounts</div>
-              <div className="text-2xl font-bold text-slate-700">8</div>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );

@@ -62,6 +62,38 @@ CANONICAL_TYPES = [
     "Credit-Builder Loan",
 ]
 
+# ───────────────── OCCUPATION WEIGHTS ─────────────────
+# Risk weights are in [0, 1]. Higher = riskier.
+# Keys match your TRAIN/CSV occupation values (e.g., "Lawyer", "Engineer", "_______", etc.)
+OCC_RISK = {
+    "_______": 0.08,        # neutral/unknown placeholder
+    "Lawyer": 0.10,
+    "Architect": 0.08,
+    "Engineer": 0.06,
+    "Scientist": 0.05,
+    "Mechanic": 0.12,
+    "Accountant": 0.07,
+    "Developer": 0.06,
+    "Media_Manager": 0.10,
+    "Teacher": 0.07,
+    "Entrepreneur": 0.14,
+    "Doctor": 0.04,
+    "Journalist": 0.10,
+    "Manager": 0.09,
+    "Musician": 0.16,
+    "Writer": 0.12,
+}
+
+# Global knobs for how strongly occupation affects score
+OCC_RULE_MULT   = 0.90   # rule-layer impact; raise to increase occupation influence
+OCC_FEATURE_MULT = 2.50  # model feature gain; raise to make the NN “feel” it more
+
+def occupation_risk_value(occ_label: str) -> float:
+    """Return a bounded risk weight for an occupation label present in TRAIN CSV."""
+    if not isinstance(occ_label, str):
+        return OCC_RISK.get("_______", 0.08)
+    return float(OCC_RISK.get(occ_label.strip(), OCC_RISK.get("_______", 0.08)))
+
 LOAN_REGEX = {
     "Mortgage Loan":           re.compile(r"\b(mortgage|home\s*loan)\b", re.I),
     "Home Equity Loan":        re.compile(r"\b(home\s*equity)\b", re.I),
@@ -127,6 +159,48 @@ CANONICAL_FLAGS = {
     "Payday Loan": "eng_has_payday",
     "Credit-Builder Loan": "eng_has_credit_builder",
 }
+
+# ───────────────── OCCUPATION NORMALIZATION ─────────────────
+OCCUPATION_MAP = {
+    "professional": "Engineer",             # or "Developer" / "Scientist"
+    "management": "Manager",
+    "sales": "Entrepreneur",                # closest equivalent in dataset
+    "administrative": "Accountant",         # white-collar / office type
+    "service": "Mechanic",                  # blue-collar or customer service
+    "manufacturing": "Mechanic",            # also blue-collar
+    "healthcare": "Doctor",
+    "education": "Teacher",
+    "government": "Lawyer",                 # proxy for civil/official roles
+    "self-employed": "Entrepreneur",
+    "retired": "_______",                   # special neutral placeholder
+    "student": "_______",                   # low experience placeholder
+    "other": "Writer"                       # generic catch-all
+}
+
+# Hand-tuned occupation risk weights (0 = neutral, higher = riskier)
+# Use the dataset-side occupation labels (the values produced by OCCUPATION_MAP).
+OCC_RISK = {
+    "_______": 0.10,       # neutral / unknown
+    "Engineer": 0.05,
+    "Developer": 0.05,
+    "Scientist": 0.05,
+    "Accountant": 0.08,
+    "Teacher": 0.07,
+    "Doctor": 0.04,
+    "Lawyer": 0.07,
+    "Architect": 0.06,
+    "Manager": 0.08,
+    "Entrepreneur": 0.12,
+    "Journalist": 0.10,
+    "Musician": 0.14,
+    "Writer": 0.10,
+    "Mechanic": 0.11,
+    "Media_Manager": 0.09,
+}
+
+def occupation_risk_value(occ_label: str) -> float:
+    return float(OCC_RISK.get(str(occ_label).strip(), OCC_RISK["_______"]))
+
 
 def loan_flags_from_series(type_of_loan_series: pd.Series) -> pd.DataFrame:
     """
@@ -253,7 +327,6 @@ def parse_history_months(s: pd.Series) -> pd.Series:
 CAT_WHITELIST = {
     "Month",                    # 12 months
     "Occupation",               # job titles (moderate variety)
-    "Type_of_Loan",             # e.g., Auto, Home, Credit Card, etc.
     "Credit_Mix",               # Good / Standard / Bad
     "Payment_Behaviour",        # spending pattern tags
     "Payment_of_Min_Amount",    # Yes / No
@@ -296,6 +369,13 @@ def split_num_cat(df: pd.DataFrame):
     # Numeric = columns that convert to at least some numbers
     numeric_cols = [c for c in raw.columns if not num_coerced[c].isna().all()]
     num_df = num_coerced[numeric_cols].fillna(0.0)
+
+    # ---- Engineered: numeric occupation risk feature ----
+    if "Occupation" in raw.columns:
+        occ_series = raw["Occupation"].astype(str)
+        occ_risk = occ_series.map(occupation_risk_value).astype(float).fillna(OCC_RISK.get("_______", 0.08))
+        # Amplify so the scaler/NN sees meaningful variance
+        num_df["eng_occ_risk"] = occ_risk * OCC_FEATURE_MULT
 
     # ---- Add multi-hot loan flags as numeric features ----
     if "Type_of_Loan" in raw.columns:
@@ -355,67 +435,122 @@ def split_num_cat(df: pd.DataFrame):
     return num_df, cat_df
 
 def rule_risk_from_df(df: pd.DataFrame) -> float:
+    """
+    Return a risk probability in [0,1] built from interpretable heuristics.
+    Uses income/DTI/cashflow/utilization + loan-type penalties + counts.
+    """
     row = df.iloc[0]
-    # ... your existing safe coercions above ...
+
+    # Safe coercions
+    inc  = pd.to_numeric(row.get("Monthly_Inhand_Salary"), errors="coerce")
+    emi  = pd.to_numeric(row.get("Total_EMI_per_month"), errors="coerce")
+    inv  = pd.to_numeric(row.get("Amount_invested_monthly"), errors="coerce")
+    util = pd.to_numeric(row.get("Credit_Utilization_Ratio"), errors="coerce")
+    debt = pd.to_numeric(row.get("Outstanding_Debt"), errors="coerce")
+
+    n_acc   = pd.to_numeric(row.get("Num_Bank_Accounts"), errors="coerce")
+    n_cc    = pd.to_numeric(row.get("Num_Credit_Card"), errors="coerce")
+    n_loans = pd.to_numeric(row.get("Num_of_Loan"), errors="coerce")
 
     credit_mix = str(row.get("Credit_Mix", "")).strip().lower()
     behaviour  = str(row.get("Payment_Behaviour", "")).lower()
-    loan_types = str(row.get("Type_of_Loan", "")).lower()
 
     pieces = []
 
-    # ... monthly burden / dti / cashflow / utilization blocks ...
+    # Occupation penalty (interpretable rule)
+    occ_label = str(row.get("Occupation", "_______"))
+    occ_pen = OCC_RULE_MULT * occupation_risk_value(occ_label)
+    if occ_pen > 0:
+        pieces.append(occ_pen)
 
-    # ── REPLACE THIS OLD BLOCK ─────────────────────────────────────────
-    # # Payday / short-term loans
-    # if "payday" in loan_types or "short-term" in loan_types:
-    #     pieces.append(0.9)
-    # ───────────────────────────────────────────────────────────────────
+    # Monthly burden and DTI
+    if pd.notna(inc) and inc > 0 and pd.notna(emi):
+        burden = float(emi) / float(inc)
+        pieces.append(np.clip((burden - 0.3) / 0.6, 0.0, 1.0))
+    else:
+        pieces.append(0.7)  # missing/zero income → elevated but not max
 
-    # ── WITH THIS NEW PER-TYPE PENALTY BLOCK ───────────────────────────
-    # Use the same normalizer you added earlier
+    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv) and inc > 0:
+        dti_m = (float(emi) + float(inv)) / float(inc)
+        pieces.append(np.clip((dti_m - 0.3) / 0.6, 0.0, 1.0))
+
+    # Cash flow
+    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv):
+        cash_flow = float(inc) - (float(emi) + float(inv))
+        pieces.append(0.9 if cash_flow < 0 else (0.6 if cash_flow < 300 else 0.1))
+
+    # Utilization
+    if pd.notna(util):
+        pieces.append(np.clip((float(util) - 0.3) / 0.5, 0.0, 1.0))
+
+    # ── Loan-type penalties (normalized) ──
     matched, _ = normalize_loan_types(row.get("Type_of_Loan", ""))
 
-    # Tunable per-type weights (examples; tweak to taste)
+    # Per-type base risk weights
     type_penalties = {
-        "Payday Loan":              0.35,
-        "Debt Consolidation Loan":  0.15,
-        "Personal Loan":            0.08,
-        "Student Loan":             0.05,
-        "Auto Loan":                0.04,
-        "Home Equity Loan":         0.03,
-        "Mortgage Loan":            0.02,
-        "Credit-Builder Loan":      0.00,  # keep neutral (often positive intent)
+        "Payday Loan":              0.50,
+        "Debt Consolidation Loan":  0.25,
+        "Personal Loan":            0.15,
+        "Student Loan":             0.10,
+        "Auto Loan":                0.05,
+        "Home Equity Loan":         0.04,
+        "Mortgage Loan":            0.03,
+        "Credit-Builder Loan":      0.00
     }
 
-    loan_risk = 0.0
-    for t in matched:
-        loan_risk += type_penalties.get(t, 0.05)
+    # Calculate total risk sum and diversity
+    loan_risk = sum(type_penalties.get(t, 0.05) for t in matched)
+    n_types = len(matched)
 
-    # Diminishing returns / safety cap
-    loan_risk = min(0.5, loan_risk)
+    # Reward diversity (more unique safe types)
+    if n_types > 1:
+        diversity_bonus = min(0.15 * np.log1p(n_types), 0.25)  # cap benefit
+    else:
+        diversity_bonus = 0.0
 
+    # Combine: more types = slightly less risk (but never negative)
+    loan_risk = max(0.0, loan_risk - diversity_bonus)
+
+    # Soft cap
+    loan_risk = min(0.7, loan_risk)
     if loan_risk > 0:
         pieces.append(loan_risk)
-    # ───────────────────────────────────────────────────────────────────
 
-    # High-spend behaviour
+    # Behaviour, credit mix, debt
     if "high_spent" in behaviour:
         pieces.append(0.6)
-
-    # Credit mix “poor”
     if credit_mix in {"bad", "poor"}:
         pieces.append(0.7)
+    if pd.notna(debt):
+        pieces.append(np.clip(float(debt) / 15000.0, 0.0, 1.0))
 
-    # ... outstanding debt, counts, etc. ...
+    # Counts
+    if pd.notna(n_acc):
+        if n_acc <= 0:
+            pieces.append(0.2)
+        elif n_acc >= 9:
+            pieces.append(0.15)
+    if pd.notna(n_cc):
+        if n_cc >= 8:
+            pieces.append(0.35)
+        elif n_cc >= 5:
+            pieces.append(0.2)
+        elif n_cc == 0:
+            pieces.append(0.1)
+    if pd.notna(n_loans):
+        if n_loans >= 6:
+            pieces.append(0.5)
+        elif n_loans >= 4:
+            pieces.append(0.3)
+        elif n_loans == 0:
+            pieces.append(0.05)
 
     if not pieces:
         return 0.3
 
+    # Emphasize worst half
     k = max(1, int(len(pieces) * 0.5))
     return float(np.mean(sorted(pieces)[-k:]))
-
-
 
 
 # ───────────────── TRAIN PREP (dynamic) ─────────────────
@@ -567,107 +702,126 @@ def fallback_reasons_dynamic(df: pd.DataFrame, top_k: int = 4):
         ][:top_k]
     return out
 
-def summarize_reasons(attr_vec: np.ndarray, row_df: pd.DataFrame, top_k=4):
+def summarize_reasons(row_df: pd.DataFrame, top_k: int = 4):
     """
-    Turn per-feature attributions into human-readable reasons.
-    Supports base numeric indices and engineered features:
-      eng_dti, eng_cash_flow, eng_mix_auto/home/payday/card
+    Model-agnostic, column-agnostic reason generator.
+    It derives interpretable signals directly from the input row (no reliance on
+    fitted column orders or OHE feature names). Returns top_k reason strings.
     """
-    # Build aligned feature name list used in transform order
-    base_num_names = [f"num_{c}" for c in NUMERIC_COLS] + ENGINEERED_NUMERIC_COLS
-    field_slices = []
-    for i, n in enumerate(base_num_names):
-        field_slices.append((n, (i, i+1)))
+    row = row_df.iloc[0]
 
-    # Add categorical groups (keep coarse grouping for reasons)
-    start = len(base_num_names)
-    cat_feature_names = ohe.get_feature_names_out()  # like 'cat_2_January'
-    prefixes = [fn.split("_")[0] + "_" + fn.split("_")[1] for fn in cat_feature_names]
-    cat_cols_named = [f"cat_{c}" for c in CATEGORICAL_COLS]
-    idx = start
-    for cname in cat_cols_named:
-        count = sum(1 for p in prefixes if p == cname)
-        field_slices.append((cname, (idx, idx + count)))
-        idx += count
+    # Safe pulls
+    inc  = pd.to_numeric(row.get("Monthly_Inhand_Salary"), errors="coerce")
+    emi  = pd.to_numeric(row.get("Total_EMI_per_month"), errors="coerce")
+    inv  = pd.to_numeric(row.get("Amount_invested_monthly"), errors="coerce")
+    util = pd.to_numeric(row.get("Credit_Utilization_Ratio"), errors="coerce")
+    debt = pd.to_numeric(row.get("Outstanding_Debt"), errors="coerce")
 
-    # Rank fields by ABS attribution
-    scores = []
-    for fname, (s, e) in field_slices:
-        contrib = attr_vec[s:e]
-        score = float(np.sum(np.abs(contrib)))
-        signed = float(np.sum(contrib))
-        scores.append((fname, score, signed, (s, e)))
-    scores.sort(key=lambda x: x[1], reverse=True)
+    n_acc   = pd.to_numeric(row.get("Num_Bank_Accounts"), errors="coerce")
+    n_cc    = pd.to_numeric(row.get("Num_Credit_Card"), errors="coerce")
+    n_loans = pd.to_numeric(row.get("Num_of_Loan"), errors="coerce")
 
-    # Helpers to read raw values from original row_df
-    def num(col): 
-        return pd.to_numeric(row_df.iloc[0, col], errors="coerce")
+    credit_mix = str(row.get("Credit_Mix", "")).strip().lower()
+    behaviour  = str(row.get("Payment_Behaviour", "")).lower()
+    tol_raw    = row.get("Type_of_Loan", "")
 
-    reasons = []
-    for fname, _, signed, _ in scores:
-        # Engineered numeric features
-        if fname == "eng_dti":
-            inc, exp = num(7), num(8)
-            if pd.notna(inc) and inc > 0 and pd.notna(exp):
-                dti = exp / inc
-                if dti >= 0.5:
-                    reasons.append("High debt-to-income ratio (DTI).")
-                elif dti >= 0.35:
-                    reasons.append("Elevated debt-to-income ratio.")
-        elif fname == "eng_cash_flow":
-            inc, exp = num(7), num(8)
-            if pd.notna(inc) and pd.notna(exp) and (inc - exp) < 0:
-                reasons.append("Negative monthly cash flow (expenses exceed income).")
-        elif fname == "eng_mix_payday":
-            loans = str(row_df.iloc[0, 12] or "").lower()
-            if "payday" in loans or "short-term" in loans:
-                reasons.append("Recent or frequent payday/short-term loans.")
-        elif fname in ("eng_mix_auto", "eng_mix_card", "eng_mix_home"):
-            # usually not adverse, skip unless you want to phrase neutrally
-            pass
+    # Helper to push a (score, text) entry if score > 0
+    reasons_scored = []
+    def add(score, text):
+        s = float(max(0.0, min(1.0, score)))
+        if s > 0:
+            reasons_scored.append((s, text))
 
-        # Base numeric columns
-        elif fname == "num_7":   # income
-            v = num(7)
-            if pd.notna(v) and v < 3500:
-                reasons.append("Low monthly income relative to obligations.")
-        elif fname == "num_8":   # expenses
-            v = num(8)
-            if pd.notna(v) and v > 2500:
-                reasons.append("High monthly expenses reduce repayment capacity.")
-        elif fname == "num_19":  # bureau score
-            v = num(19)
-            if pd.notna(v) and v < 600:
-                reasons.append("Low external bureau score.")
-        elif fname == "num_23":  # obligations
-            v = num(23)
-            if pd.notna(v) and v > 300:
-                reasons.append("High current obligations.")
+    # ---- Burden / DTI ----
+    if pd.notna(inc) and inc > 0 and pd.notna(emi):
+        burden = float(emi) / float(inc)
+        # scale: 0 at 0.3 → 1 at 0.9+
+        add(np.clip((burden - 0.3) / 0.6, 0.0, 1.0),
+            "High monthly payment burden relative to income (EMI/income).")
+    else:
+        add(0.7, "Income information is missing/zero, increasing uncertainty and risk.")
 
-        # Categoricals (coarse)
-        elif fname == "cat_12":
-            s = str(row_df.iloc[0, 12] or "").lower()
-            if "payday" in s or "short-term" in s:
-                reasons.append("Recent or frequent payday/short-term loans.")
-        elif fname == "cat_22":
-            s = str(row_df.iloc[0, 22] or "").lower()
-            if "high_spent" in s:
-                reasons.append("High spending pattern relative to income.")
-        elif fname == "cat_18":
-            s = str(row_df.iloc[0, 18] or "").lower()
-            if s == "poor":
-                reasons.append("Reported credit status indicates elevated risk.")
+    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv) and inc > 0:
+        dti_m = (float(emi) + float(inv)) / float(inc)
+        add(np.clip((dti_m - 0.3) / 0.6, 0.0, 1.0),
+            "Elevated monthly debt-to-income ratio.")
 
-        if len(reasons) >= top_k:
-            break
+    # ---- Cash flow ----
+    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv):
+        cash_flow = float(inc) - (float(emi) + float(inv))
+        add(0.9 if cash_flow < 0 else (0.6 if cash_flow < 300 else 0.0),
+            "Weak monthly cash flow after obligations.")
 
-    # De-dup & cap
+    # ---- Utilization ----
+    if pd.notna(util):
+        add(np.clip((float(util) - 0.3) / 0.5, 0.0, 1.0),
+            "High credit utilization ratio.")
+
+    # ---- Loan types (normalized) ----
+    matched_types, _ = normalize_loan_types(tol_raw)
+    type_penalties = {
+        "Payday Loan":              0.35,
+        "Debt Consolidation Loan":  0.15,
+        "Personal Loan":            0.08,
+        "Student Loan":             0.05,
+        "Auto Loan":                0.04,
+        "Home Equity Loan":         0.03,
+        "Mortgage Loan":            0.02,
+        "Credit-Builder Loan":      0.00,
+    }
+    if matched_types:
+        loan_risk = min(0.5, sum(type_penalties.get(t, 0.05) for t in matched_types))
+        # Build a readable phrase of risky types first
+        sorted_types = sorted(matched_types, key=lambda t: type_penalties.get(t, 0.05), reverse=True)
+        add(loan_risk, f"Loan portfolio includes higher-risk products: {', '.join(sorted_types)}.")
+
+    # ---- Behaviour / Mix ----
+    if "high_spent" in behaviour:
+        add(0.6, "Spending pattern indicates high outflows relative to income.")
+    if credit_mix in {"bad", "poor"}:
+        add(0.7, "Reported credit mix is unfavorable.")
+
+    # ---- Debt level ----
+    if pd.notna(debt):
+        add(np.clip(float(debt) / 15000.0, 0.0, 1.0),
+            "High outstanding debt relative to heuristic threshold.")
+
+    # ---- Counts (accounts/cards/loans) ----
+    if pd.notna(n_acc):
+        if n_acc <= 0:
+            add(0.3, "Very thin banking profile (no bank accounts).")
+        elif n_acc >= 9:
+            add(0.2, "Many bank accounts may add complexity to obligations.")
+    if pd.notna(n_cc):
+        if n_cc >= 8:
+            add(0.45, "Many credit cards may indicate elevated revolving exposure.")
+        elif n_cc >= 5:
+            add(0.30, "Several credit cards increase potential utilization/inquiries.")
+        elif n_cc == 0:
+            add(0.15, "No credit cards: thin revolving history.")
+    if pd.notna(n_loans):
+        if n_loans >= 6:
+            add(0.65, "Many concurrent loans increase affordability pressure.")
+        elif n_loans >= 4:
+            add(0.40, "Multiple concurrent loans increase affordability pressure.")
+        elif n_loans == 0:
+            add(0.08, "No active loans: limited installment credit history.")
+
+    # Rank by score, then de-duplicate by message
+    reasons_scored.sort(key=lambda x: x[0], reverse=True)
     out, seen = [], set()
-    for r in reasons:
-        if r not in seen:
-            out.append(r); seen.add(r)
+    for _, text in reasons_scored:
+        if text not in seen:
+            out.append(text)
+            seen.add(text)
         if len(out) >= top_k:
             break
+
+    # Fallback if empty
+    if not out:
+        out = [
+            "Insufficient data to identify strong drivers; additional information may improve assessment."
+        ]
     return out
 
 # ───────────────── USER PAYLOAD → ROW ─────────────────
@@ -708,6 +862,15 @@ def build_df_from_user_payload(payload: Dict[str, Any]) -> pd.DataFrame:
         if "Credit_Mix" in row:
             row["Credit_Mix"] = s
 
+    # Normalize occupation (client sends short categories)
+    occ = str(payload.get("employment_role", "Unknown")).strip().lower()
+    if occ in OCCUPATION_MAP:
+        mapped_occ = OCCUPATION_MAP[occ]
+    else:
+        mapped_occ = "_______"  # default neutral placeholder
+
+    if "Occupation" in row:
+        row["Occupation"] = mapped_occ
 
     if "Payment_of_Min_Amount" in row and not row.get("Payment_of_Min_Amount"):
         row["Payment_of_Min_Amount"] = "No"  # conservative
@@ -719,9 +882,8 @@ def build_df_from_user_payload(payload: Dict[str, Any]) -> pd.DataFrame:
     if "Monthly_Inhand_Salary" in row:        row["Monthly_Inhand_Salary"] = income
     if "Annual_Income" in row:                row["Annual_Income"] = income * 12.0
     if "Total_EMI_per_month" in row:          row["Total_EMI_per_month"] = housing + other
-    if "Amount_invested_monthly" in row:      row["Amount_invested_monthly"] = 0.0
+    if "Amount_invested_monthly" in row:      row["Amount_invested_monthly"] = investedAmount
     if "Outstanding_Debt" in row:             row["Outstanding_Debt"] = float(payload.get("obligations", 0.0))
-    if "Occupation" in row:                   row["Occupation"] = role
     if "Age" in row:                          row["Age"] = age
     if "Month" in row:                        row["Month"] = month
     if "Type_of_Loan" in row:
