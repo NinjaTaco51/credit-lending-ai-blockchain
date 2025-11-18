@@ -132,7 +132,7 @@ export default function Dashboard() {
     console.log("Sending payload:", dataInJson);
 
     try {
-      const response = await fetch("http://0.0.0.0:8080/score", {
+      const response = await fetch("http://localhost:8080/score", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
