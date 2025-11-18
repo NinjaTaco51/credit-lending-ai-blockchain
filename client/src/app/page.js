@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Eye, EyeOff, Mail, Lock, User, Phone, Calendar } from 'lucide-react';
+import { CreditCard, Eye, EyeOff, Mail, Lock, User, Phone, Calendar, Building2, UserCircle } from 'lucide-react';
 
 export default function AuthPages() {
   const [mounted, setMounted] = useState(false);
-  const [currentPage, setCurrentPage] = useState('login');
+  const [userType, setUserType] = useState('borrower'); // 'borrower' or 'lender'
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,22 +26,24 @@ export default function AuthPages() {
     phone: '',
     dob: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    companyName: '', // For lenders only
+    businessId: '' // For lenders only
   });
   
   const handleLoginChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
     setLoginData({
       ...loginData,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: value
     });
   };
   
   const handleSignupChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
     setSignupData({
       ...signupData,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: value
     });
   };
   
@@ -48,8 +51,8 @@ export default function AuthPages() {
     setIsLoading(true);
     
     setTimeout(() => {
-      console.log('Login data:', loginData);
-      alert('Login successful! (This is a demo)');
+      console.log('Login data:', { ...loginData, userType });
+      alert(`${userType === 'borrower' ? 'Borrower' : 'Lender'} login successful! (This is a demo)`);
       setIsLoading(false);
     }, 1500);
   };
@@ -63,11 +66,27 @@ export default function AuthPages() {
     setIsLoading(true);
     
     setTimeout(() => {
-      console.log('Signup data:', signupData);
-      alert('Account created successfully! (This is a demo)');
+      console.log('Signup data:', { ...signupData, userType });
+      alert(`${userType === 'borrower' ? 'Borrower' : 'Lender'} account created successfully! (This is a demo)`);
       setIsLoading(false);
-      setCurrentPage('login');
+      setAuthMode('login');
     }, 1500);
+  };
+  
+  const switchUserType = (type) => {
+    setUserType(type);
+    setAuthMode('login');
+    setLoginData({ email: '', password: '' });
+    setSignupData({
+      fullName: '',
+      email: '',
+      phone: '',
+      dob: '',
+      password: '',
+      confirmPassword: '',
+      companyName: '',
+      businessId: ''
+    });
   };
   
   if (!mounted) {
@@ -88,24 +107,26 @@ export default function AuthPages() {
             
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => setCurrentPage('login')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  currentPage === 'login'
+                onClick={() => switchUserType('borrower')}
+                className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  userType === 'borrower'
                     ? 'bg-slate-800 text-white'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                Login
+                <UserCircle className="w-4 h-4 mr-2" />
+                Borrower Portal
               </button>
               <button
-                onClick={() => setCurrentPage('signup')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  currentPage === 'signup'
+                onClick={() => switchUserType('lender')}
+                className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  userType === 'lender'
                     ? 'bg-slate-800 text-white'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                Sign Up
+                <Building2 className="w-4 h-4 mr-2" />
+                Lender Portal
               </button>
             </div>
           </div>
@@ -114,12 +135,23 @@ export default function AuthPages() {
       
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentPage === 'login' ? (
+        {authMode === 'login' ? (
           // LOGIN PAGE
           <div className="max-w-md mx-auto">
             <div className="text-center mb-6">
-              <h2 className="text-3xl font-bold text-slate-800 mb-2">Welcome Back</h2>
-              <p className="text-slate-600">Sign in to your CreditView account</p>
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
+                {userType === 'borrower' ? (
+                  <UserCircle className="w-8 h-8 text-white" />
+                ) : (
+                  <Building2 className="w-8 h-8 text-white" />
+                )}
+              </div>
+              <h2 className="text-3xl font-bold text-slate-800 mb-2">
+                {userType === 'borrower' ? 'Borrower Login' : 'Lender Login'}
+              </h2>
+              <p className="text-slate-600">
+                Sign in to your {userType === 'borrower' ? 'borrower' : 'lender'} account
+              </p>
             </div>
             
             <div className="bg-white rounded-2xl shadow-lg p-8">
@@ -182,7 +214,7 @@ export default function AuthPages() {
                     Don't have an account?{' '}
                     <button
                       type="button"
-                      onClick={() => setCurrentPage('signup')}
+                      onClick={() => setAuthMode('signup')}
                       className="text-blue-600 hover:text-blue-700 font-medium"
                     >
                       Sign up
@@ -196,30 +228,64 @@ export default function AuthPages() {
           // SIGNUP PAGE
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-6">
-              <h2 className="text-3xl font-bold text-slate-800 mb-2">Create Your Account</h2>
-              <p className="text-slate-600">Join CreditView to start monitoring your credit score</p>
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
+                {userType === 'borrower' ? (
+                  <UserCircle className="w-8 h-8 text-white" />
+                ) : (
+                  <Building2 className="w-8 h-8 text-white" />
+                )}
+              </div>
+              <h2 className="text-3xl font-bold text-slate-800 mb-2">
+                {userType === 'borrower' ? 'Create Borrower Account' : 'Create Lender Account'}
+              </h2>
+              <p className="text-slate-600">
+                Join CreditView as a {userType === 'borrower' ? 'borrower' : 'lender'}
+              </p>
             </div>
             
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Full Name */}
+                  {/* Full Name / Company Name */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Full Name <span className="text-red-500">*</span>
+                      {userType === 'borrower' ? 'Full Name' : 'Company Name'} <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <User className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      {userType === 'borrower' ? (
+                        <User className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      ) : (
+                        <Building2 className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      )}
                       <input
                         type="text"
-                        name="fullName"
-                        value={signupData.fullName}
+                        name={userType === 'borrower' ? 'fullName' : 'companyName'}
+                        value={userType === 'borrower' ? signupData.fullName : signupData.companyName}
                         onChange={handleSignupChange}
                         className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="John Doe"
+                        placeholder={userType === 'borrower' ? 'John Doe' : 'Acme Lending Corp'}
                       />
                     </div>
                   </div>
+                  
+                  {/* Business ID (Lenders only) */}
+                  {userType === 'lender' && (
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Business ID / Tax ID <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="businessId"
+                          value={signupData.businessId}
+                          onChange={handleSignupChange}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="12-3456789"
+                        />
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Email */}
                   <div>
@@ -257,22 +323,24 @@ export default function AuthPages() {
                     </div>
                   </div>
                   
-                  {/* Date of Birth */}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Date of Birth <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
-                      <input
-                        type="date"
-                        name="dob"
-                        value={signupData.dob}
-                        onChange={handleSignupChange}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                  {/* Date of Birth (Borrowers only) */}
+                  {userType === 'borrower' && (
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Date of Birth <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                        <input
+                          type="date"
+                          name="dob"
+                          value={signupData.dob}
+                          onChange={handleSignupChange}
+                          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                   {/* Password */}
                   <div>
@@ -343,7 +411,7 @@ export default function AuthPages() {
                     Already have an account?{' '}
                     <button
                       type="button"
-                      onClick={() => setCurrentPage('login')}
+                      onClick={() => setAuthMode('login')}
                       className="text-blue-600 hover:text-blue-700 font-medium"
                     >
                       Sign in

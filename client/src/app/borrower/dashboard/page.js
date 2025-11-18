@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react';
-import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X } from 'lucide-react';
+import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut } from 'lucide-react';
 
 export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -35,9 +35,6 @@ export default function Dashboard() {
       homeEquity: false,
       other: false
     },
-    consentCredit: false,
-    consentTerms: false,
-    consentMarketing: false
   });
   
   const getScoreColor = (score) => {
@@ -175,10 +172,10 @@ export default function Dashboard() {
   const scorePercentage = (creditScore / 850) * 100;
   
   const navItems = [
-    { icon: CreditCard,label: 'Dashboard', href: '/dashboard'},
-    { icon: DollarSign, label: 'Loan Portal', href: '/loans' },
-    { icon: User, label: 'Profile', href: '/profile' },
-
+    { icon: CreditCard,label: 'Dashboard', href: '/borrower/dashboard'},
+    { icon: DollarSign, label: 'Loan Portal', href: '/borrower/loans' },
+    { icon: User, label: 'Profile', href: '/borrower/profile' },
+    { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
   
   return (
@@ -322,6 +319,7 @@ export default function Dashboard() {
                     name="monthlyIncome"
                     value={formData.monthlyIncome}
                     onChange={handleInputChange}
+                    onWheel={(e) => e.target.blur()}
                     className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                     placeholder="5000"
                     required
@@ -341,6 +339,7 @@ export default function Dashboard() {
                     name="housingCost"
                     value={formData.housingCost}
                     onChange={handleInputChange}
+                    onWheel={(e) => e.target.blur()}
                     className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                     placeholder="1500"
                     required
@@ -361,6 +360,7 @@ export default function Dashboard() {
                     name="otherExpenses"
                     value={formData.otherExpenses}
                     onChange={handleInputChange}
+                    onWheel={(e) => e.target.blur()}
                     className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                     placeholder="800"
                     required
@@ -381,6 +381,7 @@ export default function Dashboard() {
                     name="invested"
                     value={formData.invested}
                     onChange={handleInputChange}
+                    onWheel={(e) => e.target.blur()}
                     className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                     placeholder="800"
                     required
@@ -449,6 +450,7 @@ export default function Dashboard() {
                   name="numCreditCards"
                   value={formData.numCreditCards}
                   onChange={handleInputChange}
+                  onWheel={(e) => e.target.blur()}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                   placeholder="5"
                   min="0"
@@ -467,6 +469,7 @@ export default function Dashboard() {
                   name="numAccounts"
                   value={formData.numAccounts}
                   onChange={handleInputChange}
+                  onWheel={(e) => e.target.blur()}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                   placeholder="5"
                   min="0"
@@ -485,6 +488,7 @@ export default function Dashboard() {
                   name="numLoans"
                   value={formData.numLoans}
                   onChange={handleInputChange}
+                  onWheel={(e) => e.target.blur()}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                   placeholder="5"
                   min="0"
@@ -588,53 +592,6 @@ export default function Dashboard() {
                       className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="ml-2 text-sm text-slate-700">Other</span>
-                  </label>
-                </div>
-              </div>
-              
-              {/* Consent Flags */}
-              <div className="pt-4 border-t border-slate-200">
-                <label className="block text-sm font-medium text-slate-700 mb-3">
-                  Consent & Agreements
-                </label>
-                <div className="space-y-3">
-                  <label className="flex items-start">
-                    <input
-                      type="checkbox"
-                      name="consentCredit"
-                      checked={formData.consentCredit}
-                      onChange={handleCheckboxChange}
-                      className="w-4 h-4 mt-1 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                    <span className="ml-2 text-sm text-slate-700">
-                      I authorize CreditView to access my credit report <span className="text-red-500">*</span>
-                    </span>
-                  </label>
-                  <label className="flex items-start">
-                    <input
-                      type="checkbox"
-                      name="consentTerms"
-                      checked={formData.consentTerms}
-                      onChange={handleCheckboxChange}
-                      className="w-4 h-4 mt-1 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                    <span className="ml-2 text-sm text-slate-700">
-                      I agree to the Terms of Service and Privacy Policy <span className="text-red-500">*</span>
-                    </span>
-                  </label>
-                  <label className="flex items-start">
-                    <input
-                      type="checkbox"
-                      name="consentMarketing"
-                      checked={formData.consentMarketing}
-                      onChange={handleCheckboxChange}
-                      className="w-4 h-4 mt-1 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm text-slate-700">
-                      I agree to receive marketing communications (optional)
-                    </span>
                   </label>
                 </div>
               </div>
