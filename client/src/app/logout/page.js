@@ -28,7 +28,7 @@ export default function LoggedOutPage() {
             
             <div className="flex items-center space-x-4">
               <a
-                href="/login"
+                href="/"
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
               >
                 Sign In

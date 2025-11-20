@@ -2,6 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Eye, EyeOff, Mail, Lock, User, Phone, Calendar, Building2, UserCircle } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = 'https://gojqrulogcdunldjlraf.supabase.co'
+const supabaseKey = process.env.SUPABASE_KEY
+const supabase = createClient(supabaseUrl, supabaseKey)
 
 export default function AuthPages() {
   const [mounted, setMounted] = useState(false);
@@ -49,12 +54,29 @@ export default function AuthPages() {
   
   const handleLoginSubmit = async () => {
     setIsLoading(true);
+
+    console.log('Login data:', { ...loginData, userType });
+    setIsLoading(false);
+
     
-    setTimeout(() => {
-      console.log('Login data:', { ...loginData, userType });
-      alert(`${userType === 'borrower' ? 'Borrower' : 'Lender'} login successful! (This is a demo)`);
-      setIsLoading(false);
-    }, 1500);
+    let { data: email } = await supabase
+      .from('Account')
+      .select('email')
+
+    let { data: password } = await supabase
+      .from('Account')
+      .select('password')
+
+    if (email == loginData.email && password == loginData.password) {
+      if (userType == "lender") {
+      window.location.href = "/lender/requests"
+      } else {
+        window.location.href = "/borrower/dashboard"
+      }
+    } else {
+      alert("incorrect password")
+    }
+
   };
   
   const handleSignupSubmit = async () => {
@@ -64,13 +86,25 @@ export default function AuthPages() {
     }
     
     setIsLoading(true);
-    
-    setTimeout(() => {
-      console.log('Signup data:', { ...signupData, userType });
-      alert(`${userType === 'borrower' ? 'Borrower' : 'Lender'} account created successfully! (This is a demo)`);
-      setIsLoading(false);
-      setAuthMode('login');
-    }, 1500);
+        
+    const { data, error } = await supabase
+      .from('Account')
+      .insert([
+      { 
+        type: userType, 
+        email: signupData.email, 
+        name: signupData.fullName,
+        phone: signupData.phone,
+        dob: signupData.dob,
+        password: signupData.password,
+      },
+      ])
+      .select()
+
+
+    setIsLoading(false);      
+    setAuthMode('login');
+
   };
   
   const switchUserType = (type) => {
