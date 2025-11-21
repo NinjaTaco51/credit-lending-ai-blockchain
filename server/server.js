@@ -9,6 +9,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Routes
+
 app.post("/api/credit-score", async (req, res) => {
   const { userId } = req.body;
 
@@ -32,8 +33,6 @@ app.post("/api/credit-score", async (req, res) => {
 
   res.json({ score: score.score });
 });
-
-
 
 // Start Server
 const PORT = process.env.PORT || 3000;

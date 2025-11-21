@@ -2,11 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Eye, EyeOff, Mail, Lock, User, Phone, Calendar, Building2, UserCircle } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = 'https://gojqrulogcdunldjlraf.supabase.co'
-const supabaseKey = process.env.SUPABASE_KEY
-const supabase = createClient(supabaseUrl, supabaseKey)
+import supabase from "../config/supabaseClient"
 
 export default function AuthPages() {
   const [mounted, setMounted] = useState(false);
@@ -53,28 +49,30 @@ export default function AuthPages() {
   };
   
   const handleLoginSubmit = async () => {
+
     setIsLoading(true);
 
-    console.log('Login data:', { ...loginData, userType });
-    setIsLoading(false);
-
+    const { data, error } = await supabase
+      .from("Account")
+      .select("password_hash")
+      .eq("email", loginData.email)
+  
+      if (error) {
+        console.log(error)
+      }
     
-    let { data: email } = await supabase
-      .from('Account')
-      .select('email')
 
-    let { data: password } = await supabase
-      .from('Account')
-      .select('password')
-
-    if (email == loginData.email && password == loginData.password) {
+    if (data[0].password_hash == loginData.password) {
       if (userType == "lender") {
-      window.location.href = "/lender/requests"
+        setIsLoading(false);
+        window.location.href = "/lender/requests"
       } else {
+        setIsLoading(false);
         window.location.href = "/borrower/dashboard"
       }
     } else {
       alert("incorrect password")
+      setIsLoading(false);
     }
 
   };
@@ -86,21 +84,25 @@ export default function AuthPages() {
     }
     
     setIsLoading(true);
-        
-    const { data, error } = await supabase
-      .from('Account')
-      .insert([
-      { 
-        type: userType, 
-        email: signupData.email, 
-        name: signupData.fullName,
-        phone: signupData.phone,
-        dob: signupData.dob,
-        password: signupData.password,
-      },
-      ])
-      .select()
 
+    const passwordHash = signupData.password
+
+    const { data, error } = await supabase
+      .from("Account")
+      .insert([
+        {
+          email: signupData.email,
+          name: signupData.fullName,
+          phone: signupData.phone,
+          dob: signupData.dob,
+          password_hash: passwordHash,
+          type: userType
+        }
+      ])
+  
+      if (error) {
+        console.log(error)
+      }
 
     setIsLoading(false);      
     setAuthMode('login');

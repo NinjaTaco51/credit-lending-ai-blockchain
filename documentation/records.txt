@@ -6,3 +6,8 @@ npm install express cors body-parser dotenv
 made server.js file
 npm run dev to run client
 node server.js to run server
+
+cd client
+npm install @supabase/supabase-js
+in env add APP_SUPABASE_URL = https://gojqrulogcdunldjlraf.supabase.co
+APP_ANON_KEY
