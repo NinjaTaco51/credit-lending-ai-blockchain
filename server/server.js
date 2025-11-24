@@ -1,14 +1,31 @@
 const express = require("express");
 const cors = require("cors");
+const connectDB = require("../loandesk/config/db");
 const bodyParser = require("body-parser");
 
 const app = express();
+
+
+// Connect Database
+connectDB();
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
 
 // Routes
+
+const authRoutes = require("../loandesk/routes/authRoutes");
+const userRoutes = require("../loandesk/routes/userRoutes");
+const walletRoutes = require("../loandesk/routes/walletRoutes");
+
+//use routes
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/loans", walletRoutes);
+
+
+
 
 app.post("/api/credit-score", async (req, res) => {
   const { userId } = req.body;
