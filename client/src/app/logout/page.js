@@ -4,15 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, CheckCircle, LogIn } from 'lucide-react';
 
 export default function LoggedOutPage() {
-  const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
-    setMounted(true);
+    localStorage.removeItem('userEmail');
   }, []);
   
-  if (!mounted) {
-    return null;
-  }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">

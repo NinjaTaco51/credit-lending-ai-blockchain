@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut } from 'lucide-react';
+import supabase from "../../../config/supabaseClient"
 
 export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -10,12 +11,8 @@ export default function Dashboard() {
   const [showScore, setShowScore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    dob: '',
+    age: '',
     monthlyIncome: '',
-    takeHomePay: '',
     housingCost: '',
     otherExpenses: '',
     invested: '',
@@ -36,6 +33,109 @@ export default function Dashboard() {
       other: false
     },
   });
+
+  useEffect(() => {
+    const fetchAndPrefill = async () => {
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        window.location.href = "/";
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('Account')
+        .select('credit_data, dob')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Prefill error:', error);
+        return;
+      }
+
+      // Check if data exists before accessing it
+      if (!data) {
+        console.log('No data found for this user');
+        return;
+      }
+
+      const birthDate = new Date(data.dob);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+
+      // Adjust if the birthday hasn't occurred yet this year
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+
+      let trueLoans = {
+          mortgage: false,
+          auto: false,
+          student: false,
+          personal: false,
+          debtConsol: false,
+          creditBuilder: false,
+          payDay: false,
+          homeEquity: false,
+          other: false
+        }
+  
+      if (data.credit_data) {
+        let dbLoans = data.credit_data.loans;
+        for (let i = 0; i < dbLoans.length; i++) {
+          if (dbLoans[i] == "Mortgage Loan") {
+            trueLoans["mortgage"] = true
+          } else if (dbLoans[i] == "Auto Loan") {
+            trueLoans["auto"] = true
+          } else if (dbLoans[i] == "Student Loan") {
+            trueLoans["student"] = true
+          } else if (dbLoans[i] == "Personal Loan") {
+            trueLoans["personal"] = true
+          } else if (dbLoans[i] == "Debt Consolidation Loan") {
+            trueLoans["debtConsol"] = true
+          } else if (dbLoans[i] == "Credit-Builder Loan") {
+            trueLoans["creditBuilder"] = true
+          } else if (dbLoans[i] == "Payday Loan") {
+            trueLoans["payDay"] = true
+          } else if (dbLoans[i] == "Home Equity Loan") {
+            trueLoans["homeEquity"] = true
+          } else {
+            trueLoans["other"] = true
+          }
+        }
+        console.log(trueLoans)
+      }
+
+      // Safely coerce to strings for controlled inputs
+      setFormData(prev => ({
+        ...prev,
+        age: age,
+        monthlyIncome: (data.credit_data?.income_monthly ?? '').toString(),
+        housingCost: (data.credit_data?.housing_cost_monthly ?? '').toString(),
+        otherExpenses: (data.credit_data?.other_expenses_monthly ?? '').toString(),
+        invested: (data.credit_data?.invested ?? '').toString(),
+        occupation: data.credit_data?.employment_role ?? '',
+        educationLevel: data.credit_data?.education_level ?? '',
+        numCreditCards: (data.credit_data?.num_credit_cards ?? '').toString(),
+        numAccounts: (data.credit_data?.num_bank_accounts ?? '').toString(),
+        numLoans: (data.credit_data?.num_loans ?? '').toString(),
+        loanTypes: trueLoans ?? {
+          mortgage: false,
+          auto: false,
+          student: false,
+          personal: false,
+          debtConsol: false,
+          creditBuilder: false,
+          payDay: false,
+          homeEquity: false,
+          other: false
+        },
+      }));
+    };
+
+    fetchAndPrefill();
+  }, []);
   
   const getScoreColor = (score) => {
     if (score >= 800) return '#10b981';
@@ -79,10 +179,23 @@ export default function Dashboard() {
   };
   
   const handleSubmit = async (e) => {
+    
     e.preventDefault();
     setIsLoading(true);
 
-    const birthDate = new Date(formData.dob);
+    const email = localStorage.getItem('userEmail');
+      if (!email) {
+        window.location.href = "/";
+        return;
+      }
+
+    let { data: dobRow, error: dobError } = await supabase
+      .from('Account')
+      .select('dob')
+      .eq('email', email)
+      .maybeSingle();
+
+    const birthDate = new Date(dobRow.dob);
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
@@ -120,6 +233,7 @@ export default function Dashboard() {
       "housing_cost_monthly": Number(formData.housingCost),
       "other_expenses_monthly": Number(formData.otherExpenses),
       "employment_role": String(formData.occupation),
+      "education_level": String(formData.educationLevel),
       "loans": loans,
       age,
       application_month,
@@ -130,6 +244,12 @@ export default function Dashboard() {
     };
 
     console.log("Sending payload:", dataInJson);
+
+    const { data: creditDataRow, error: creditDataError } = await supabase
+      .from('Account')
+      .update({"credit_data": dataInJson})
+      .eq('email', email)
+      .maybeSingle();
 
     try {
       const response = await fetch("http://localhost:8080/score", {
@@ -149,10 +269,12 @@ export default function Dashboard() {
       }
 
       const result = await response.json();
-      console.log(result);
-      console.log(result.credit_score);
-      console.log(result.band);
-      console.log(result.reasons);
+
+      const { data: creditScoreRow, error: creditScoreError } = await supabase
+      .from('Account')
+      .update({"credit_score": result.credit_score, "credit_reasons": result.reasons})
+      .eq('email', email)
+      .maybeSingle();
       
       setCreditScore(Number(result.credit_score));
       setReasons(result.reasons || []);
@@ -246,66 +368,6 @@ export default function Dashboard() {
             <h3 className="text-2xl font-bold text-slate-800 mb-6">Your Information</h3>
             
             <div className="space-y-4">
-              {/* Full Name */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Full Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-50"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-              
-              {/* Email Address */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-50"
-                  placeholder="john@example.com"
-                />
-              </div>
-              
-              {/* Phone Number */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-50"
-                  placeholder="(555) 123-4567"
-                />
-              </div>
-              
-              {/* Date of Birth */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Date of Birth <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  name="dob"
-                  value={formData.dob}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
-                  required
-                />
-              </div>
               
               {/* Monthly Income */}
               <div>

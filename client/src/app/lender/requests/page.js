@@ -4,13 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { Eye, CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut } from 'lucide-react';
 
 export default function LenderDashboard() {
-  const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [filterStatus, setFilterStatus] = useState('pending'); // 'all', 'pending', 'approved', 'denied'
   
   useEffect(() => {
-    setMounted(true);
   }, []);
   
   // Mock loan requests data - in real app, this would come from your backend
@@ -152,14 +150,11 @@ export default function LenderDashboard() {
     filterStatus === 'all' ? true : req.status === filterStatus
   );
   
-  const navItems = [
+ const navItems = [
+    { icon: DollarSign, label: 'Loan Requests', href: '/lender/requests' },
     { icon: User, label: 'Profile', href: '/lender/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
-  ];
-  
-  if (!mounted) {
-    return null;
-  }
+   ];
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">

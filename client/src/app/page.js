@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Eye, EyeOff, Mail, Lock, User, Phone, Calendar, Building2, UserCircle } from 'lucide-react';
 import supabase from "../config/supabaseClient"
+import bcrypt from 'bcryptjs';
 
 export default function AuthPages() {
-  const [mounted, setMounted] = useState(false);
   const [userType, setUserType] = useState('borrower'); // 'borrower' or 'lender'
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [showPassword, setShowPassword] = useState(false);
@@ -13,7 +13,6 @@ export default function AuthPages() {
   const [isLoading, setIsLoading] = useState(false);
   
   useEffect(() => {
-    setMounted(true);
   }, []);
   
   const [loginData, setLoginData] = useState({
@@ -28,9 +27,39 @@ export default function AuthPages() {
     dob: '',
     password: '',
     confirmPassword: '',
-    companyName: '', // For lenders only
-    businessId: '' // For lenders only
   });
+
+  function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(email)) {
+      return true;
+    }
+    return false;
+  }
+
+  function isValidPhone(phone) {
+    const phoneStr = phone.toString();
+    const phoneRegex = /^\d{10}$/;
+    if (phoneRegex.test(phoneStr)) {
+      return true;
+    }
+    return false;
+  }
+
+  function isValidPassword(password) {
+    if (password.length < 8) {
+      return false;
+    }
+    
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    
+    if (hasUppercase && hasLowercase && hasNumber) {
+      return true;
+    }
+    return false;
+  }
   
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
@@ -51,33 +80,95 @@ export default function AuthPages() {
   const handleLoginSubmit = async () => {
 
     setIsLoading(true);
-
+    
     const { data, error } = await supabase
       .from("Account")
-      .select("password_hash")
+      .select("password_hash, type")
       .eq("email", loginData.email)
-  
-      if (error) {
-        console.log(error)
-      }
-    
+      .maybeSingle();
 
-    if (data[0].password_hash == loginData.password) {
-      if (userType == "lender") {
-        setIsLoading(false);
-        window.location.href = "/lender/requests"
-      } else {
-        setIsLoading(false);
-        window.location.href = "/borrower/dashboard"
-      }
-    } else {
-      alert("incorrect password")
+
+    if (error) {
+      console.error(error);
+      alert("Something went wrong. Please try again.");
       setIsLoading(false);
+      return;
+    }
+
+    // no user found
+    if (data == null) {
+      alert("Email address not found");
+      setIsLoading(false);
+      return;
+    }
+
+    const passwordCorrect = await bcrypt.compare(loginData.password, data.password_hash);
+
+    if (userType === "borrower") {
+      if (passwordCorrect) {
+        if (userType === data.type) {
+          localStorage.setItem('userEmail', loginData.email);
+          window.location.href = "/borrower/dashboard";
+        } else {
+          alert("Please select correct portal type")
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        alert("Incorrect Password")
+        setIsLoading(false);
+        return;
+      } 
+    }
+
+    if (userType === "lender") {
+      if (userType === data.type) {
+        // if it's Password123, it needs to go to setup account
+        if (data.password_hash === loginData.password) {
+          localStorage.setItem('userEmail', loginData.email);
+          window.location.href = "/lender/setup"
+        } else if (passwordCorrect) {
+          localStorage.setItem('userEmail', loginData.email);
+          window.location.href = "/lender/requests";
+        } else {
+          alert("Incorrect password");
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        alert("Please select correct portal type")
+        setIsLoading(false);
+        return;
+      }
     }
 
   };
+
   
   const handleSignupSubmit = async () => {
+    if (signupData.email == null || signupData.fullName == null || signupData.phone == null || signupData.dob == null || signupData.password == null) {
+      alert("Fill in all fields")
+      return;
+    }
+
+    //check valid email format
+    if (!isValidEmail(signupData.email)) {
+      alert("Input Valid Email")
+      return;
+    }
+
+    //check valid phone format
+    if (!isValidPhone(signupData.phone)) {
+      alert("Input Valid Phone")
+      return;
+    }
+    
+    //check valid password format
+    if (!isValidPassword(signupData.password)) {
+      alert("Input Valid Password that meets requirements")
+      return;
+    }
+    
     if (signupData.password !== signupData.confirmPassword) {
       alert('Passwords do not match!');
       return;
@@ -85,7 +176,7 @@ export default function AuthPages() {
     
     setIsLoading(true);
 
-    const passwordHash = signupData.password
+    const passwordHash = await bcrypt.hash(signupData.password, 12)
 
     const { data, error } = await supabase
       .from("Account")
@@ -99,6 +190,10 @@ export default function AuthPages() {
           type: userType
         }
       ])
+
+      if (data) {
+        console.log(data)
+      }
   
       if (error) {
         console.log(error)
@@ -124,10 +219,6 @@ export default function AuthPages() {
       businessId: ''
     });
   };
-  
-  if (!mounted) {
-    return null;
-  }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -171,7 +262,7 @@ export default function AuthPages() {
       
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {authMode === 'login' ? (
+        {authMode === 'login' || userType === 'lender' ? (
           // LOGIN PAGE
           <div className="max-w-md mx-auto">
             <div className="text-center mb-6">
@@ -244,84 +335,60 @@ export default function AuthPages() {
                   {isLoading ? 'Signing in...' : 'Sign In'}
                 </button>
                 
-                {/* Sign Up Link */}
-                <div className="text-center pt-4 border-t border-slate-200">
-                  <p className="text-sm text-slate-600">
-                    Don't have an account?{' '}
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('signup')}
-                      className="text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      Sign up
-                    </button>
-                  </p>
-                </div>
+                {/* Sign Up Link - Only for Borrowers */}
+                {userType === 'borrower' && (
+                  <div className="text-center pt-4 border-t border-slate-200">
+                    <p className="text-sm text-slate-600">
+                      Don't have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('signup')}
+                        className="text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Sign up
+                      </button>
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         ) : (
-          // SIGNUP PAGE
+          // SIGNUP PAGE - Only for Borrowers
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-6">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
-                {userType === 'borrower' ? (
-                  <UserCircle className="w-8 h-8 text-white" />
-                ) : (
-                  <Building2 className="w-8 h-8 text-white" />
-                )}
+                <UserCircle className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-3xl font-bold text-slate-800 mb-2">
-                {userType === 'borrower' ? 'Create Borrower Account' : 'Create Lender Account'}
+                Create Borrower Account
               </h2>
               <p className="text-slate-600">
-                Join CreditView as a {userType === 'borrower' ? 'borrower' : 'lender'}
+                Join CreditView as a borrower
               </p>
             </div>
             
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Full Name / Company Name */}
+                  {/* Full Name */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      {userType === 'borrower' ? 'Full Name' : 'Company Name'} <span className="text-red-500">*</span>
+                      Full Name <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      {userType === 'borrower' ? (
-                        <User className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
-                      ) : (
-                        <Building2 className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
-                      )}
+                      <User className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
                       <input
                         type="text"
-                        name={userType === 'borrower' ? 'fullName' : 'companyName'}
-                        value={userType === 'borrower' ? signupData.fullName : signupData.companyName}
+                        name="fullName"
+                        value={signupData.fullName}
                         onChange={handleSignupChange}
                         className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={userType === 'borrower' ? 'John Doe' : 'Acme Lending Corp'}
+                        placeholder="John Doe"
                       />
                     </div>
                   </div>
-                  
-                  {/* Business ID (Lenders only) */}
-                  {userType === 'lender' && (
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Business ID / Tax ID <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          name="businessId"
-                          value={signupData.businessId}
-                          onChange={handleSignupChange}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="12-3456789"
-                        />
-                      </div>
-                    </div>
-                  )}
+                
                   
                   {/* Email */}
                   <div>
@@ -354,29 +421,27 @@ export default function AuthPages() {
                         value={signupData.phone}
                         onChange={handleSignupChange}
                         className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="(555) 123-4567"
+                        placeholder="5551234567"
                       />
                     </div>
                   </div>
                   
-                  {/* Date of Birth (Borrowers only) */}
-                  {userType === 'borrower' && (
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Date of Birth <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
-                        <input
-                          type="date"
-                          name="dob"
-                          value={signupData.dob}
-                          onChange={handleSignupChange}
-                          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
+                  {/* Date of Birth */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Date of Birth <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      <input
+                        type="date"
+                        name="dob"
+                        value={signupData.dob}
+                        onChange={handleSignupChange}
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
-                  )}
+                  </div>
                   
                   {/* Password */}
                   <div>

@@ -1,34 +1,74 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, Save, Mail, Phone, Calendar, Lock, Eye, EyeOff } from 'lucide-react';
+import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, Save, Mail, Phone, Calendar, Lock, Eye, EyeOff, Wallet, CheckCircle, AlertCircle, Shield, LogOut } from 'lucide-react';
+import supabase from "../../../config/supabaseClient"
+import bcrypt from 'bcryptjs';
 
 export default function EditProfilePage() {
-  const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  // Mock user data - in real app, this would come from your backend
   const [profileData, setProfileData] = useState({
-    fullName: 'John Doe',
-    email: 'john.doe@example.com',
-    phone: '(555) 123-4567',
-    dob: '1990-05-15'
+    name: '',
+    email: '',
   });
-  
+
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
+
+    function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(email)) {
+      return true;
+    }
+    return false;
+  }
+
+  function isValidPassword(password) {
+    if (password.length < 8) {
+      return false;
+    }
+    
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    
+    if (hasUppercase && hasLowercase && hasNumber) {
+      return true;
+    }
+    return false;
+  }
+  
+  useEffect(() => {
+    const fetchAndPrefill = async () => {
+        const email = localStorage.getItem('userEmail');
+          if (!email) {
+            window.location.href = "/";
+            return;
+          }
+      
+      
+      let { data, error} = await supabase
+        .from("Account")
+        .select('name, email')
+        .eq('email', email)
+        .maybeSingle();
+
+      setProfileData({
+        name: data.name,
+        email: data.email,
+      });
+      console.log(profileData)
+    };
+    fetchAndPrefill();
+  }, []);
+  
   
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -47,6 +87,24 @@ export default function EditProfilePage() {
   };
   
   const handleSave = async () => {
+    const email = localStorage.getItem('userEmail');
+    if (!email) {
+      window.location.href = "/";
+      return;
+    }
+
+    //Validate all profile fields are inputted
+    if(!profileData.name || !profileData.email ) {
+      alert("Please Fill in All Fields in Personal Information")
+      return;
+    }
+
+    //check valid email format
+    if (!isValidEmail(profileData.email)) {
+      alert("Input Valid Email")
+      return;
+    }
+
     // Validate password fields if any are filled
     if (passwordData.currentPassword || passwordData.newPassword || passwordData.confirmPassword) {
       if (!passwordData.currentPassword) {
@@ -54,54 +112,70 @@ export default function EditProfilePage() {
         return;
       }
       if (!passwordData.newPassword) {
-        alert('Please enter a new password');
+        alert('Please enter a new password or Delete Current Password to Edit Basic Profile Info');
         return;
       }
       if (passwordData.newPassword !== passwordData.confirmPassword) {
         alert('New passwords do not match!');
         return;
       }
-      if (passwordData.newPassword.length < 8) {
-        alert('New password must be at least 8 characters long');
+      if (!isValidPassword(passwordData.newPassword)) {
+        alert("Input Valid Password that meets requirements")
         return;
       }
+
+      const {data: pwCheck, error: pwCheckError} = await supabase
+        .from('Account')
+        .select('password_hash')
+        .eq('email', email)
+        .maybeSingle();
+
+      const currentpasswordHash = pwCheck.password_hash
+      const passwordCorrect = await bcrypt.compare(passwordData.currentPassword, currentpasswordHash);
+      
+      if (passwordCorrect) {
+        const newPasswordHash = await bcrypt.hash(passwordData.newPassword, 12);
+        const {data: pwUpdate, error: pwUpdateError} = await supabase
+          .from('Account')
+          .update({'password_hash': newPasswordHash})
+          .eq('email', email)
+      } else {
+        alert("Incorrect Current Password")
+        return;
+      }
+
     }
     
     setIsLoading(true);
-    setSuccessMessage('');
+
+    const {data: update, error: updateError} = await supabase
+      .from('Account')
+      .update({
+        "name": profileData.name,
+        "email": profileData.email,
+      })
+      .eq('email', email)
+      .maybeSingle();
+
+    setIsLoading(false);
     
-    // Simulate API call
-    setTimeout(() => {
-      console.log('Updated profile data:', profileData);
-      if (passwordData.currentPassword) {
-        console.log('Password updated');
-      }
-      setSuccessMessage('Profile updated successfully!');
-      setIsLoading(false);
-      
-      // Clear password fields
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setSuccessMessage('');
-      }, 3000);
-    }, 1500);
-  };
-  
-  const navItems = [
-    { icon: CreditCard, label: 'Dashboard', href: '/borrower/dashboard' },
-    { icon: DollarSign, label: 'Loan Portal', href: '/borrower/loans' },
-    { icon: User, label: 'Profile', href: '/borrower/profile' }
-  ];
-  
-  if (!mounted) {
-    return null;
+    // Clear password fields
+    setPasswordData({
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    });
+
+    setIsLoading(false);
+    alert("Profile Updated Successfully")
+
   }
+  
+ const navItems = [
+    { icon: DollarSign, label: 'Loan Requests', href: '/lender/requests' },
+    { icon: User, label: 'Profile', href: '/lender/profile' },
+    { icon: LogOut, label: 'Logout', href: '/logout'}
+   ];
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -165,14 +239,6 @@ export default function EditProfilePage() {
           <p className="text-slate-600">Update your personal information and preferences</p>
         </div>
         
-        {/* Success Message */}
-        {successMessage && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center">
-            <Save className="w-5 h-5 text-green-600 mr-3" />
-            <span className="text-sm text-green-800 font-medium">{successMessage}</span>
-          </div>
-        )}
-        
         {/* Profile Form */}
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <div className="space-y-6">
@@ -184,21 +250,24 @@ export default function EditProfilePage() {
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Full Name */}
-                <div className="md:col-span-2">
+                {/* Name */}
+                <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Full Name <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={profileData.fullName}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-                    placeholder="John Doe"
-                  />
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                    <input
+                      type="name"
+                      name="name"
+                      value={profileData.name}
+                      onChange={handleInputChange}
+                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+                      placeholder="John Doe"
+                    />
+                  </div>
                 </div>
-                
+
                 {/* Email */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -216,50 +285,17 @@ export default function EditProfilePage() {
                     />
                   </div>
                 </div>
-                
-                {/* Phone */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Phone Number <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={profileData.phone}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-                      placeholder="(555) 123-4567"
-                    />
-                  </div>
-                </div>
-                
-                {/* Date of Birth */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Date of Birth <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
-                    <input
-                      type="date"
-                      name="dob"
-                      value={profileData.dob}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-                    />
-                  </div>
-                </div>
               </div>
             </div>
-            
+
             {/* Change Password Section */}
             <div className="pt-6 border-t border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center">
                 <Lock className="w-5 h-5 mr-2" />
                 Change Password
               </h3>
+
+              <p className="mb-4 text-sm text-red-500">Current Password Needed to make New Password</p>
               
               <div className="space-y-4">
                 {/* Current Password */}
@@ -282,7 +318,7 @@ export default function EditProfilePage() {
                       onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                       className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                     >
-                      {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      {showCurrentPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
                     </button>
                   </div>
                 </div>
@@ -307,7 +343,7 @@ export default function EditProfilePage() {
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                     >
-                      {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      {showNewPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
                     </button>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
@@ -335,7 +371,7 @@ export default function EditProfilePage() {
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                     >
-                      {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      {showConfirmPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
                     </button>
                   </div>
                 </div>

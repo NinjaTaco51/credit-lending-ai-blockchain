@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut } from 'lucide-react';
 
 export default function LoanRequestPage() {
-  const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -21,7 +20,11 @@ export default function LoanRequestPage() {
   });
   
   useEffect(() => {
-    setMounted(true);
+    const email = localStorage.getItem('userEmail');
+      if (!email) {
+        window.location.href = "/";
+        return;
+      }
   }, []);
   
   const handleInputChange = (e) => {
@@ -66,9 +69,6 @@ export default function LoanRequestPage() {
     { value: 'business', label: 'Business Loan', icon: Briefcase }
   ];
   
-  if (!mounted) {
-    return null;
-  }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
