@@ -1,128 +1,80 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Eye, CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut } from 'lucide-react';
+import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle } from 'lucide-react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function LenderDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [filterStatus, setFilterStatus] = useState('pending'); // 'all', 'pending', 'approved', 'denied'
+  const [filterStatus, setFilterStatus] = useState('pending');
+  const [loanRequests, setLoanRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   useEffect(() => {
-  }, []);
+    fetchLoanRequests();
+  }, [filterStatus]);
   
-  // Mock loan requests data - in real app, this would come from your backend
-  const [loanRequests, setLoanRequests] = useState([
-    {
-      id: 'LR-001',
-      borrowerName: 'John Doe',
-      email: 'john.doe@example.com',
-      loanType: 'Personal Loan',
-      loanAmount: 25000,
-      loanTerm: 36,
-      loanPurpose: 'Debt consolidation and home improvements',
-      creditScore: 720,
-      creditBand: 'Good',
-      reasons: [
-        'Strong payment history with consistent on-time payments',
-        'Moderate credit utilization at 35%',
-        'Diverse credit mix including mortgage and credit cards'
-      ],
-      requestDate: '2024-01-15',
-      status: 'pending'
-    },
-    {
-      id: 'LR-002',
-      borrowerName: 'Jane Smith',
-      email: 'jane.smith@example.com',
-      loanType: 'Auto Loan',
-      loanAmount: 35000,
-      loanTerm: 60,
-      loanPurpose: 'Purchase a new vehicle for work commute',
-      creditScore: 780,
-      creditBand: 'Very Good',
-      reasons: [
-        'Excellent payment history with no missed payments',
-        'Low credit utilization at 18%',
-        'Long credit history of 12+ years'
-      ],
-      requestDate: '2024-01-16',
-      status: 'pending'
-    },
-    {
-      id: 'LR-003',
-      borrowerName: 'Michael Johnson',
-      email: 'michael.j@example.com',
-      loanType: 'Home Loan',
-      loanAmount: 250000,
-      loanTerm: 360,
-      loanPurpose: 'First-time home purchase in suburban area',
-      creditScore: 650,
-      creditBand: 'Fair',
-      reasons: [
-        'Limited credit history of only 3 years',
-        'High credit utilization at 65%',
-        'Recent late payment in the last 6 months'
-      ],
-      requestDate: '2024-01-14',
-      status: 'pending'
-    },
-    {
-      id: 'LR-004',
-      borrowerName: 'Sarah Williams',
-      email: 'sarah.w@example.com',
-      loanType: 'Business Loan',
-      loanAmount: 100000,
-      loanTerm: 120,
-      loanPurpose: 'Expanding existing small business operations',
-      creditScore: 815,
-      creditBand: 'Excellent',
-      reasons: [
-        'Perfect payment history with no delinquencies',
-        'Very low credit utilization at 12%',
-        'Strong financial profile with multiple accounts'
-      ],
-      requestDate: '2024-01-13',
-      status: 'approved'
-    },
-    {
-      id: 'LR-005',
-      borrowerName: 'Robert Brown',
-      email: 'robert.b@example.com',
-      loanType: 'Personal Loan',
-      loanAmount: 15000,
-      loanTerm: 24,
-      loanPurpose: 'Medical expenses and emergency costs',
-      creditScore: 560,
-      creditBand: 'Poor',
-      reasons: [
-        'Multiple missed payments in the past year',
-        'Very high credit utilization at 85%',
-        'Recent bankruptcy filing'
-      ],
-      requestDate: '2024-01-12',
-      status: 'denied'
+  const fetchLoanRequests = async () => {
+    try {
+      setIsLoading(true);
+      const statusParam = filterStatus === 'all' ? '' : `?status=${filterStatus}`;
+      const response = await fetch(`${API_URL}/api/loan-requests${statusParam}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setLoanRequests(data.requests);
+      } else {
+        setError('Failed to load loan requests');
+      }
+    } catch (err) {
+      console.error('Error fetching loan requests:', err);
+      setError('Failed to connect to server');
+    } finally {
+      setIsLoading(false);
     }
-  ]);
-  
-  const handleApprove = (requestId) => {
-    setLoanRequests(prev => 
-      prev.map(req => 
-        req.id === requestId ? { ...req, status: 'approved' } : req
-      )
-    );
-    alert(`Loan request ${requestId} has been approved!`);
-    setSelectedRequest(null);
   };
   
-  const handleDeny = (requestId) => {
-    setLoanRequests(prev => 
-      prev.map(req => 
-        req.id === requestId ? { ...req, status: 'denied' } : req
-      )
-    );
-    alert(`Loan request ${requestId} has been denied.`);
-    setSelectedRequest(null);
+  const handleApprove = async (requestId) => {
+    try {
+      const response = await fetch(`${API_URL}/api/loan-requests/${requestId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        alert(`Loan request ${requestId} has been approved!`);
+        fetchLoanRequests(); // Refresh the list
+        setSelectedRequest(null);
+      }
+    } catch (err) {
+      console.error('Error approving loan:', err);
+      alert('Failed to approve loan request');
+    }
+  };
+  
+  const handleDeny = async (requestId) => {
+    try {
+      const response = await fetch(`${API_URL}/api/loan-requests/${requestId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'denied' })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        alert(`Loan request ${requestId} has been denied.`);
+        fetchLoanRequests(); // Refresh the list
+        setSelectedRequest(null);
+      }
+    } catch (err) {
+      console.error('Error denying loan:', err);
+      alert('Failed to deny loan request');
+    }
   };
   
   const getScoreColor = (score) => {
@@ -146,15 +98,11 @@ export default function LenderDashboard() {
     }
   };
   
-  const filteredRequests = loanRequests.filter(req => 
-    filterStatus === 'all' ? true : req.status === filterStatus
-  );
-  
- const navItems = [
+  const navItems = [
     { icon: DollarSign, label: 'Loan Requests', href: '/lender/requests' },
     { icon: User, label: 'Profile', href: '/lender/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
-   ];
+  ];
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -168,7 +116,6 @@ export default function LenderDashboard() {
               </div>
             </div>
             
-            {/* Desktop Navigation */}
             <div className="hidden lg:flex space-x-1">
               {navItems.map((item) => (
                 <a
@@ -182,7 +129,6 @@ export default function LenderDashboard() {
               ))}
             </div>
             
-            {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-2 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -192,7 +138,6 @@ export default function LenderDashboard() {
           </div>
         </div>
         
-        {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white">
             <div className="px-2 pt-2 pb-3 space-y-1">
@@ -238,7 +183,7 @@ export default function LenderDashboard() {
                 : 'bg-white text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Pending ({loanRequests.filter(r => r.status === 'pending').length})
+            Pending
           </button>
           <button
             onClick={() => setFilterStatus('approved')}
@@ -248,7 +193,7 @@ export default function LenderDashboard() {
                 : 'bg-white text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Approved ({loanRequests.filter(r => r.status === 'approved').length})
+            Approved
           </button>
           <button
             onClick={() => setFilterStatus('denied')}
@@ -258,174 +203,185 @@ export default function LenderDashboard() {
                 : 'bg-white text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Denied ({loanRequests.filter(r => r.status === 'denied').length})
+            Denied
           </button>
         </div>
         
-        {/* Requests Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Requests List */}
-          <div className="space-y-4">
-            {filteredRequests.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center">
-                <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <p className="text-slate-600">No loan requests found for this filter.</p>
-              </div>
-            ) : (
-              filteredRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className={`bg-white rounded-lg shadow-md p-6 cursor-pointer transition-all hover:shadow-lg ${
-                    selectedRequest?.id === request.id ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  onClick={() => setSelectedRequest(request)}
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-800">{request.borrowerName}</h3>
-                      <p className="text-sm text-slate-500">{request.id}</p>
-                    </div>
-                    {getStatusBadge(request.status)}
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <p className="text-xs text-slate-500">Loan Type</p>
-                      <p className="text-sm font-semibold text-slate-700">{request.loanType}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Amount</p>
-                      <p className="text-sm font-semibold text-slate-700">${request.loanAmount.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Credit Score</p>
-                      <p className={`text-sm font-bold px-2 py-1 rounded inline-block ${getScoreColor(request.creditScore)}`}>
-                        {request.creditScore} - {request.creditBand}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Request Date</p>
-                      <p className="text-sm font-semibold text-slate-700">{request.requestDate}</p>
-                    </div>
-                  </div>
-                  
-                  <button className="w-full mt-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-md transition-colors flex items-center justify-center">
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Details
-                  </button>
-                </div>
-              ))
-            )}
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">{error}</p>
           </div>
-          
-          {/* Request Details Panel */}
-          <div className="lg:sticky lg:top-8 h-fit">
-            {!selectedRequest ? (
-              <div className="bg-white rounded-lg shadow-md p-8 text-center">
-                <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-slate-800 mb-2">No Request Selected</h3>
-                <p className="text-slate-600">Click on a loan request to view details and take action</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.borrowerName}</h3>
-                    <p className="text-sm text-slate-500">{selectedRequest.email}</p>
-                  </div>
-                  {getStatusBadge(selectedRequest.status)}
+        )}
+        
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800"></div>
+            <p className="mt-2 text-slate-600">Loading loan requests...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Requests List */}
+            <div className="space-y-4">
+              {loanRequests.length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-8 text-center">
+                  <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                  <p className="text-slate-600">No loan requests found.</p>
                 </div>
-                
-                <div className="border-t border-slate-200 pt-4 mb-4">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Loan Information</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-slate-600">Request ID:</span>
-                      <span className="text-sm font-semibold text-slate-800">{selectedRequest.id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-slate-600">Loan Type:</span>
-                      <span className="text-sm font-semibold text-slate-800">{selectedRequest.loanType}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-slate-600">Amount:</span>
-                      <span className="text-sm font-semibold text-slate-800">${selectedRequest.loanAmount.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-slate-600">Term:</span>
-                      <span className="text-sm font-semibold text-slate-800">{selectedRequest.loanTerm} months</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-slate-600">Request Date:</span>
-                      <span className="text-sm font-semibold text-slate-800">{selectedRequest.requestDate}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="border-t border-slate-200 pt-4 mb-4">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Loan Purpose</h4>
-                  <p className="text-sm text-slate-600">{selectedRequest.loanPurpose}</p>
-                </div>
-                
-                <div className="border-t border-slate-200 pt-4 mb-4">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Credit Score</h4>
-                  <div className={`text-center py-4 rounded-lg ${getScoreColor(selectedRequest.creditScore)}`}>
-                    <div className="text-4xl font-bold">{selectedRequest.creditScore}</div>
-                    <div className="text-sm font-semibold mt-1">{selectedRequest.creditBand}</div>
-                  </div>
-                </div>
-                
-                <div className="border-t border-slate-200 pt-4 mb-6">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Key Credit Factors</h4>
-                  <div className="space-y-2">
-                    {selectedRequest.reasons.map((reason, index) => (
-                      <div key={index} className="flex items-start bg-slate-50 rounded-lg p-3">
-                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">
-                          {index + 1}
-                        </div>
-                        <p className="text-sm text-slate-700">{reason}</p>
+              ) : (
+                loanRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className={`bg-white rounded-lg shadow-md p-6 cursor-pointer transition-all hover:shadow-lg ${
+                      selectedRequest?.id === request.id ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => setSelectedRequest(request)}
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-800">{request.borrowerName}</h3>
+                        <p className="text-sm text-slate-500">{request.id}</p>
                       </div>
-                    ))}
+                      {getStatusBadge(request.status)}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <p className="text-xs text-slate-500">Loan Type</p>
+                        <p className="text-sm font-semibold text-slate-700">{request.loanType}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Amount</p>
+                        <p className="text-sm font-semibold text-slate-700">${request.loanAmount.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Credit Score</p>
+                        <p className={`text-sm font-bold px-2 py-1 rounded inline-block ${getScoreColor(request.creditScore)}`}>
+                          {request.creditScore} - {request.creditBand}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Request Date</p>
+                        <p className="text-sm font-semibold text-slate-700">{request.requestDate}</p>
+                      </div>
+                    </div>
+                    
+                    <button className="w-full mt-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-md transition-colors flex items-center justify-center">
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Details
+                    </button>
                   </div>
+                ))
+              )}
+            </div>
+            
+            {/* Request Details Panel - Rest of the component stays the same */}
+            <div className="lg:sticky lg:top-8 h-fit">
+              {!selectedRequest ? (
+                <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                  <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">No Request Selected</h3>
+                  <p className="text-slate-600">Click on a loan request to view details</p>
                 </div>
-                
-                {/* Action Buttons */}
-                {selectedRequest.status === 'pending' && (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => handleApprove(selectedRequest.id)}
-                      className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center"
-                    >
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleDeny(selectedRequest.id)}
-                      className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center"
-                    >
-                      <XCircle className="w-5 h-5 mr-2" />
-                      Deny
-                    </button>
+              ) : (
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.borrowerName}</h3>
+                      <p className="text-sm text-slate-500">{selectedRequest.email}</p>
+                    </div>
+                    {getStatusBadge(selectedRequest.status)}
                   </div>
-                )}
-                
-                {selectedRequest.status === 'approved' && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center">
-                    <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
-                    <span className="text-sm text-green-800 font-medium">This loan request has been approved</span>
+                  
+                  <div className="border-t border-slate-200 pt-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Loan Information</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-slate-600">Request ID:</span>
+                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-slate-600">Loan Type:</span>
+                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.loanType}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-slate-600">Amount:</span>
+                        <span className="text-sm font-semibold text-slate-800">${selectedRequest.loanAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-slate-600">Term:</span>
+                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.loanTerm} months</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-                
-                {selectedRequest.status === 'denied' && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center">
-                    <XCircle className="w-5 h-5 text-red-600 mr-3" />
-                    <span className="text-sm text-red-800 font-medium">This loan request has been denied</span>
+                  
+                  <div className="border-t border-slate-200 pt-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-2">Loan Purpose</h4>
+                    <p className="text-sm text-slate-600">{selectedRequest.loanPurpose}</p>
                   </div>
-                )}
-              </div>
-            )}
+                  
+                  <div className="border-t border-slate-200 pt-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Credit Score</h4>
+                    <div className={`text-center py-4 rounded-lg ${getScoreColor(selectedRequest.creditScore)}`}>
+                      <div className="text-4xl font-bold">{selectedRequest.creditScore}</div>
+                      <div className="text-sm font-semibold mt-1">{selectedRequest.creditBand}</div>
+                    </div>
+                  </div>
+                  
+                  {selectedRequest.reasons && selectedRequest.reasons.length > 0 && (
+                    <div className="border-t border-slate-200 pt-4 mb-6">
+                      <h4 className="text-sm font-semibold text-slate-700 mb-3">Key Credit Factors</h4>
+                      <div className="space-y-2">
+                        {selectedRequest.reasons.map((reason, index) => (
+                          <div key={index} className="flex items-start bg-slate-50 rounded-lg p-3">
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">
+                              {index + 1}
+                            </div>
+                            <p className="text-sm text-slate-700">{reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedRequest.status === 'pending' && (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleApprove(selectedRequest.id)}
+                        className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center"
+                      >
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleDeny(selectedRequest.id)}
+                        className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center"
+                      >
+                        <XCircle className="w-5 h-5 mr-2" />
+                        Deny
+                      </button>
+                    </div>
+                  )}
+                  
+                  {selectedRequest.status === 'approved' && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center">
+                      <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
+                      <span className="text-sm text-green-800 font-medium">This loan request has been approved</span>
+                    </div>
+                  )}
+                  
+                  {selectedRequest.status === 'denied' && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center">
+                      <XCircle className="w-5 h-5 text-red-600 mr-3" />
+                      <span className="text-sm text-red-800 font-medium">This loan request has been denied</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );

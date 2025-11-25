@@ -1,16 +1,20 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut } from 'lucide-react';
+import { CreditCard, DollarSign, User, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle } from 'lucide-react';
+import supabase from "../../../config/supabaseClient"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function LoanRequestPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Simulating whether user has completed credit check
-  // In a real app, this would come from your backend/database
   const [hasCreditScore, setHasCreditScore] = useState(false);
-  const [userCreditScore] = useState(720); // Mock credit score
+  const [userCreditScore, setUserCreditScore] = useState(null);
+  const [creditBand, setCreditBand] = useState(null);
+  const [creditReasons, setCreditReasons] = useState([]);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   
   const [loanRequest, setLoanRequest] = useState({
     loanType: '',
@@ -21,11 +25,41 @@ export default function LoanRequestPage() {
   
   useEffect(() => {
     const email = localStorage.getItem('userEmail');
-      if (!email) {
-        window.location.href = "/";
-        return;
+    if (!email) {
+      window.location.href = "/";
+      return;
+    }
+    setUserEmail(email);
+    
+    // Fetch user data and credit score from Supabase
+    const fetchUserData = async () => {
+      const { data, error } = await supabase
+        .from('Account')
+        .select('name, credit_score, credit_reasons')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (data) {
+        setUserName(data.name || 'User');
+        if (data.credit_score) {
+          setUserCreditScore(data.credit_score);
+          setCreditBand(getCreditBand(data.credit_score));
+          setHasCreditScore(true);
+          setCreditReasons(data.credit_reasons || []);
+        }
       }
+    };
+    
+    fetchUserData();
   }, []);
+  
+  const getCreditBand = (score) => {
+    if (score >= 800) return 'Excellent';
+    if (score >= 740) return 'Very Good';
+    if (score >= 670) return 'Good';
+    if (score >= 580) return 'Fair';
+    return 'Poor';
+  };
   
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -35,23 +69,65 @@ export default function LoanRequestPage() {
     });
   };
   
+  const getLoanTypeLabel = (type) => {
+    const labels = {
+      'personal': 'Personal Loan',
+      'home': 'Home Loan',
+      'auto': 'Auto Loan',
+      'student': 'Student Loan',
+      'business': 'Business Loan'
+    };
+    return labels[type] || type;
+  };
+  
   const handleSubmit = async () => {
+    if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose) {
+      alert('Please fill in all required fields');
+      return;
+    }
+    
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      console.log('Loan request data:', loanRequest);
-      alert('Loan request submitted successfully! You will receive a response within 24-48 hours.');
-      setIsLoading(false);
-      
-      // Reset form
-      setLoanRequest({
-        loanType: '',
-        loanAmount: '',
-        loanPurpose: '',
-        loanTerm: ''
+    try {
+      const response = await fetch(`${API_URL}/api/loan-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          borrowerEmail: userEmail,
+          borrowerName: userName,
+          loanType: getLoanTypeLabel(loanRequest.loanType),
+          loanAmount: parseFloat(loanRequest.loanAmount),
+          loanTerm: parseInt(loanRequest.loanTerm),
+          loanPurpose: loanRequest.loanPurpose,
+          creditScore: userCreditScore,
+          creditBand: creditBand,
+          reasons: creditReasons
+        })
       });
-    }, 1500);
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`Loan request submitted successfully! Request ID: ${data.requestId}\n\nYou will receive a response within 24-48 hours.`);
+        
+        // Reset form
+        setLoanRequest({
+          loanType: '',
+          loanAmount: '',
+          loanPurpose: '',
+          loanTerm: ''
+        });
+      } else {
+        alert('Failed to submit loan request: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error submitting loan request:', error);
+      alert('An error occurred while submitting your request. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const navItems = [
@@ -69,7 +145,6 @@ export default function LoanRequestPage() {
     { value: 'business', label: 'Business Loan', icon: Briefcase }
   ];
   
-  
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Navigation Bar */}
@@ -82,7 +157,6 @@ export default function LoanRequestPage() {
               </div>
             </div>
             
-            {/* Desktop Navigation */}
             <div className="hidden lg:flex space-x-1">
               {navItems.map((item) => (
                 <a
@@ -96,7 +170,6 @@ export default function LoanRequestPage() {
               ))}
             </div>
             
-            {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-2 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -106,7 +179,6 @@ export default function LoanRequestPage() {
           </div>
         </div>
         
-        {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white">
             <div className="px-2 pt-2 pb-3 space-y-1">
@@ -140,7 +212,7 @@ export default function LoanRequestPage() {
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-red-800 mb-1">Credit Check Required</h3>
                 <p className="text-sm text-red-700 mb-3">
-                  You must complete a credit check on the dashboard before you can request a loan. This helps us provide you with accurate loan options and terms.
+                  You must complete a credit check on the dashboard before you can request a loan.
                 </p>
                 <a
                   href="/borrower/dashboard"
@@ -158,7 +230,7 @@ export default function LoanRequestPage() {
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-green-800 mb-1">Credit Check Complete</h3>
                 <p className="text-sm text-green-700">
-                  Your credit score: <span className="font-bold">{userCreditScore}</span> - You're eligible to apply for loans
+                  Your credit score: <span className="font-bold">{userCreditScore}</span> ({creditBand}) - You're eligible to apply for loans
                 </p>
               </div>
             </div>
