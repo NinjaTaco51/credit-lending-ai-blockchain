@@ -10,5 +10,5 @@ node server.js to run server
 cd client
 npm install @supabase/supabase-js
 npm install bcryptjs
-in env add APP_SUPABASE_URL = https://gojqrulogcdunldjlraf.supabase.co
+in env in client folder add APP_SUPABASE_URL = https://gojqrulogcdunldjlraf.supabase.co
 APP_ANON_KEY
