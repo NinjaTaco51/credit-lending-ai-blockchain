@@ -394,7 +394,6 @@ export default function EditProfilePage() {
     }
     
     setIsLoading(true);
-    setSuccessMessage('');
 
     const {data: update, error: updateError} = await supabase
       .from('Account')
@@ -407,7 +406,6 @@ export default function EditProfilePage() {
       .eq('email', email)
       .maybeSingle();
 
-    setSuccessMessage('Profile updated successfully!');
     setIsLoading(false);
     
     // Clear password fields
@@ -417,9 +415,8 @@ export default function EditProfilePage() {
       confirmPassword: ''
     });
 
-    alert(successMessage)
+    alert("Profile Updated")
 
-    setSuccessMessage('')
 
   }
   
