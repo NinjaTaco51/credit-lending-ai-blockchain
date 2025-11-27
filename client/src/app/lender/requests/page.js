@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle } from 'lucide-react';
+import supabase from "../../../config/supabaseClient"
 
 export default function LenderDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
