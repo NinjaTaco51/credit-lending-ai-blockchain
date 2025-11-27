@@ -4,8 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, DollarSign, User, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-
 export default function LoanRequestPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -89,29 +87,36 @@ export default function LoanRequestPage() {
     setIsLoading(true);
     
     try {
-      const response = await fetch(`${API_URL}/api/loan-requests`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          borrowerEmail: userEmail,
-          borrowerName: userName,
-          loanType: getLoanTypeLabel(loanRequest.loanType),
-          loanAmount: parseFloat(loanRequest.loanAmount),
-          loanTerm: parseInt(loanRequest.loanTerm),
-          loanPurpose: loanRequest.loanPurpose,
-          creditScore: userCreditScore,
-          creditBand: creditBand,
-          reasons: creditReasons
+      const requestId = `LR-${Date.now()}`;
+      const requestDate = new Date().toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('loan_requests')
+        .insert({
+          request_id: requestId,
+          borrower_email: userEmail,
+          borrower_name: userName,
+          loan_type: getLoanTypeLabel(loanRequest.loanType),
+          loan_amount: parseFloat(loanRequest.loanAmount),
+          loan_term: parseInt(loanRequest.loanTerm),
+          loan_purpose: loanRequest.loanPurpose,
+          credit_score: userCreditScore,
+          credit_band: creditBand,
+          reasons: creditReasons,
+          request_date: requestDate,
+          status: 'pending'
         })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        alert(`Loan request submitted successfully! Request ID: ${data.requestId}\n\nYou will receive a response within 24-48 hours.`);
-        
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Failed to submit loan request:', error);
+        alert('Failed to submit loan request: ' + error.message);
+      } else {
+        alert(
+          `Loan request submitted successfully! Request ID: ${requestId}\n\nYou will receive a response within 24-48 hours.`
+        );
+
         // Reset form
         setLoanRequest({
           loanType: '',
@@ -119,8 +124,6 @@ export default function LoanRequestPage() {
           loanPurpose: '',
           loanTerm: ''
         });
-      } else {
-        alert('Failed to submit loan request: ' + data.error);
       }
     } catch (error) {
       console.error('Error submitting loan request:', error);

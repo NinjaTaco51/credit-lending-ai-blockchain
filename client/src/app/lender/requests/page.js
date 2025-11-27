@@ -3,8 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-
 export default function LenderDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -20,18 +18,46 @@ export default function LenderDashboard() {
   const fetchLoanRequests = async () => {
     try {
       setIsLoading(true);
-      const statusParam = filterStatus === 'all' ? '' : `?status=${filterStatus}`;
-      const response = await fetch(`${API_URL}/api/loan-requests${statusParam}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setLoanRequests(data.requests);
-      } else {
-        setError('Failed to load loan requests');
+      setError(null);
+
+      let query = supabase
+        .from('loan_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus);
       }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching loan requests:', error);
+        setError('Failed to load loan requests');
+        setLoanRequests([]);
+        return;
+      }
+
+      const mapped = (data || []).map((req) => ({
+        id: req.request_id,
+        borrowerName: req.borrower_name,
+        email: req.borrower_email,
+        loanType: req.loan_type,
+        loanAmount: Number(req.loan_amount),
+        loanTerm: req.loan_term,
+        loanPurpose: req.loan_purpose,
+        creditScore: req.credit_score,
+        creditBand: req.credit_band,
+        reasons: req.reasons || [],
+        requestDate: req.request_date,
+        status: req.status,
+      }));
+
+      setLoanRequests(mapped);
     } catch (err) {
       console.error('Error fetching loan requests:', err);
       setError('Failed to connect to server');
+      setLoanRequests([]);
     } finally {
       setIsLoading(false);
     }
@@ -39,43 +65,48 @@ export default function LenderDashboard() {
   
   const handleApprove = async (requestId) => {
     try {
-      const response = await fetch(`${API_URL}/api/loan-requests/${requestId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'approved' })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        alert(`Loan request ${requestId} has been approved!`);
-        fetchLoanRequests(); // Refresh the list
-        setSelectedRequest(null);
+      const { error } = await supabase
+        .from('loan_requests')
+        .update({ status: 'approved' })
+        .eq('request_id', requestId);
+
+      if (error) {
+        console.error('Error approving loan:', error);
+        alert('Failed to approve loan request: ' + error.message);
+        return;
       }
+
+      alert(`Loan request ${requestId} has been approved!`);
+      fetchLoanRequests(); // Refresh the list
+      setSelectedRequest(null);
     } catch (err) {
       console.error('Error approving loan:', err);
       alert('Failed to approve loan request');
     }
   };
-  
+
   const handleDeny = async (requestId) => {
     try {
-      const response = await fetch(`${API_URL}/api/loan-requests/${requestId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'denied' })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        alert(`Loan request ${requestId} has been denied.`);
-        fetchLoanRequests(); // Refresh the list
-        setSelectedRequest(null);
+      const { error } = await supabase
+        .from('loan_requests')
+        .update({ status: 'denied' })
+        .eq('request_id', requestId);
+
+      if (error) {
+        console.error('Error denying loan:', error);
+        alert('Failed to deny loan request: ' + error.message);
+        return;
       }
+
+      alert(`Loan request ${requestId} has been denied.`);
+      fetchLoanRequests(); // Refresh the list
+      setSelectedRequest(null);
     } catch (err) {
       console.error('Error denying loan:', err);
       alert('Failed to deny loan request');
     }
   };
+
   
   const getScoreColor = (score) => {
     if (score >= 800) return 'text-green-600 bg-green-50';

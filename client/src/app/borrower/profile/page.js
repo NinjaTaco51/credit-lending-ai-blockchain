@@ -25,7 +25,7 @@ export default function EditProfilePage() {
     confirmPassword: ''
   });
 
-    function isValidEmail(email) {
+  function isValidEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (emailRegex.test(email)) {
       return true;
@@ -46,60 +46,59 @@ export default function EditProfilePage() {
     if (password.length < 8) {
       return false;
     }
-    
+
     const hasUppercase = /[A-Z]/.test(password);
     const hasLowercase = /[a-z]/.test(password);
     const hasNumber = /[0-9]/.test(password);
-    
+
     if (hasUppercase && hasLowercase && hasNumber) {
       return true;
     }
     return false;
   }
-  
+
   // MetaMask state
   const [walletAddress, setWalletAddress] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [walletError, setWalletError] = useState('');
   const [isSavingWallet, setIsSavingWallet] = useState(false);
-  
+
   useEffect(() => {
     checkIfWalletIsConnected();
     loadUserWalletFromBackend();
   }, []);
-  
+
   // Load user's saved wallet address from backend
   const loadUserWalletFromBackend = async () => {
     try {
-      console.log('Attempting to load wallet from backend...');
-      
-      // TEMPORARY: Skip backend load for testing
-      // Uncomment below when your backend API is ready
-      
-      /*
-      const response = await fetch('/api/user/wallet', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.walletAddress) {
-          setWalletAddress(data.walletAddress);
-          console.log('Wallet loaded from backend:', data.walletAddress);
-        }
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        console.warn('No userEmail in localStorage');
+        return;
       }
-      */
-      
-      console.log('Backend load skipped (not connected yet)');
+
+      const { data, error } = await supabase
+        .from('Account')
+        .select('wallet_address')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading wallet from Supabase:', error);
+        return;
+      }
+
+      if (data && data.wallet_address) {
+        setWalletAddress(data.wallet_address);
+        console.log('Wallet loaded from Supabase:', data.wallet_address);
+      } else {
+        console.log('No wallet saved for this user yet');
+      }
     } catch (error) {
       console.error('Error loading wallet address:', error);
     }
   };
-  
+
   // Check if MetaMask is installed and wallet is already connected
   const checkIfWalletIsConnected = async () => {
     try {
@@ -114,12 +113,12 @@ export default function EditProfilePage() {
       console.error('Error checking wallet connection:', error);
     }
   };
-  
+
   // Connect MetaMask wallet
   const connectWallet = async () => {
     setIsConnecting(true);
     setWalletError('');
-    
+
     try {
       // Check if MetaMask is installed
       if (typeof window.ethereum === 'undefined') {
@@ -127,41 +126,40 @@ export default function EditProfilePage() {
         setIsConnecting(false);
         return;
       }
-      
+
       console.log('MetaMask detected, requesting accounts...');
-      
+
       // Request account access
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts'
       });
-      
+
       console.log('Accounts received:', accounts);
-      
+
       if (!accounts || accounts.length === 0) {
         setWalletError('No accounts found. Please create a MetaMask account first.');
         setIsConnecting(false);
         return;
       }
-      
+
       const connectedAddress = accounts[0];
       console.log('Connected address:', connectedAddress);
-      
+
       // Set the wallet address directly (no backend for now)
       setWalletAddress(connectedAddress);
       setWalletError('');
       console.log('Wallet connected successfully!');
-      
-      // UNCOMMENT THIS when your backend API is ready:
-      // try {
-      //   await saveWalletToBackend(connectedAddress);
-      // } catch (error) {
-      //   console.error('Backend save failed, but wallet is connected locally');
-      // }
+
+      try {
+        await saveWalletToBackend(connectedAddress);
+      } catch (error) {
+        console.error('Supabase save failed, but wallet is connected locally');
+      }
     } catch (error) {
       console.error('Error connecting wallet:', error);
       console.error('Error code:', error.code);
       console.error('Error message:', error.message);
-      
+
       if (error.code === 4001) {
         setWalletError('Connection rejected. Please approve the connection in MetaMask.');
       } else if (error.code === -32002) {
@@ -173,39 +171,28 @@ export default function EditProfilePage() {
       setIsConnecting(false);
     }
   };
-  
+
   // Save wallet address to backend
   const saveWalletToBackend = async (address) => {
     setIsSavingWallet(true);
     try {
-      console.log('Attempting to save wallet to backend:', address);
-      
-      // TEMPORARY: Skip backend save for testing
-      // Uncomment below when your backend API is ready
-      
-      /*
-      const response = await fetch('/api/user/wallet', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          walletAddress: address
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to save wallet address');
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        throw new Error('No user email in localStorage');
       }
-      
-      const data = await response.json();
-      console.log('Wallet saved successfully:', data);
-      */
-      
-      // Simulating successful save for now
-      console.log('Wallet save simulated (backend not connected yet)');
-      
+
+      const { error } = await supabase
+        .from('Account')
+        .update({ wallet_address: address })
+        .eq('email', email);
+
+      if (error) {
+        console.error('Error saving wallet to Supabase:', error);
+        setWalletError('Wallet connected but failed to save to your profile. Please try again.');
+        throw error;
+      }
+
+      console.log('Wallet saved successfully to Supabase');
     } catch (error) {
       console.error('Error saving wallet to backend:', error);
       setWalletError('Wallet connected but failed to save to your profile. Please try again.');
@@ -214,29 +201,28 @@ export default function EditProfilePage() {
       setIsSavingWallet(false);
     }
   };
-  
+
   // Disconnect wallet
   const disconnectWallet = async () => {
     try {
       console.log('Disconnecting wallet...');
-      
-      // TEMPORARY: Skip backend call for testing
-      // Uncomment below when your backend API is ready
-      
-      /*
-      const response = await fetch('/api/user/wallet', {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to disconnect wallet');
+
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        throw new Error('No user email in localStorage');
       }
-      */
-      
+
+      const { error } = await supabase
+        .from('Account')
+        .update({ wallet_address: null })
+        .eq('email', email);
+
+      if (error) {
+        console.error('Error clearing wallet in Supabase:', error);
+        setWalletError('Failed to disconnect wallet. Please try again.');
+        return;
+      }
+
       setWalletAddress('');
       setWalletError('');
       console.log('Wallet disconnected successfully');
@@ -245,7 +231,7 @@ export default function EditProfilePage() {
       setWalletError('Failed to disconnect wallet. Please try again.');
     }
   };
-  
+
   // Listen for account changes
   useEffect(() => {
     if (typeof window.ethereum !== 'undefined') {
@@ -264,12 +250,12 @@ export default function EditProfilePage() {
           setWalletAddress('');
         }
       });
-      
+
       window.ethereum.on('chainChanged', () => {
         window.location.reload();
       });
     }
-    
+
     return () => {
       if (typeof window.ethereum !== 'undefined') {
         window.ethereum.removeAllListeners('accountsChanged');
@@ -277,23 +263,23 @@ export default function EditProfilePage() {
       }
     };
   }, [walletAddress]);
-  
+
   // Format wallet address for display
   const formatAddress = (address) => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
-  
-  
+
+
   useEffect(() => {
     const fetchAndPrefill = async () => {
-        const email = localStorage.getItem('userEmail');
-          if (!email) {
-            window.location.href = "/";
-            return;
-          }
-      
-      
-      let { data, error} = await supabase
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        window.location.href = "/";
+        return;
+      }
+
+
+      let { data, error } = await supabase
         .from("Account")
         .select('name, email, phone, dob')
         .eq('email', email)
@@ -309,8 +295,8 @@ export default function EditProfilePage() {
     };
     fetchAndPrefill();
   }, []);
-  
-  
+
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setProfileData({
@@ -318,7 +304,7 @@ export default function EditProfilePage() {
       [name]: value
     });
   };
-  
+
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
     setPasswordData({
@@ -326,7 +312,7 @@ export default function EditProfilePage() {
       [name]: value
     });
   };
-  
+
   const handleSave = async () => {
     const email = localStorage.getItem('userEmail');
     if (!email) {
@@ -335,7 +321,7 @@ export default function EditProfilePage() {
     }
 
     //Validate all profile fields are inputted
-    if(!profileData.fullName || !profileData.email || !profileData.phone || !profileData.dob) {
+    if (!profileData.fullName || !profileData.email || !profileData.phone || !profileData.dob) {
       alert("Please Fill in All Fields in Personal Information")
       return;
     }
@@ -371,7 +357,7 @@ export default function EditProfilePage() {
         return;
       }
 
-      const {data: pwCheck, error: pwCheckError} = await supabase
+      const { data: pwCheck, error: pwCheckError } = await supabase
         .from('Account')
         .select('password_hash')
         .eq('email', email)
@@ -379,12 +365,12 @@ export default function EditProfilePage() {
 
       const currentpasswordHash = pwCheck.password_hash
       const passwordCorrect = await bcrypt.compare(passwordData.currentPassword, currentpasswordHash);
-      
+
       if (passwordCorrect) {
         const newPasswordHash = await bcrypt.hash(passwordData.newPassword, 12);
-        const {data: pwUpdate, error: pwUpdateError} = await supabase
+        const { data: pwUpdate, error: pwUpdateError } = await supabase
           .from('Account')
-          .update({'password_hash': newPasswordHash})
+          .update({ 'password_hash': newPasswordHash })
           .eq('email', email)
       } else {
         alert("Incorrect Current Password")
@@ -392,10 +378,10 @@ export default function EditProfilePage() {
       }
 
     }
-    
+
     setIsLoading(true);
 
-    const {data: update, error: updateError} = await supabase
+    const { data: update, error: updateError } = await supabase
       .from('Account')
       .update({
         "name": profileData.fullName,
@@ -407,7 +393,7 @@ export default function EditProfilePage() {
       .maybeSingle();
 
     setIsLoading(false);
-    
+
     // Clear password fields
     setPasswordData({
       currentPassword: '',
@@ -419,14 +405,14 @@ export default function EditProfilePage() {
 
 
   }
-  
+
   const navItems = [
-    { icon: CreditCard,label: 'Dashboard', href: '/borrower/dashboard'},
+    { icon: CreditCard, label: 'Dashboard', href: '/borrower/dashboard' },
     { icon: DollarSign, label: 'Loan Portal', href: '/borrower/loans' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
-    { icon: LogOut, label: 'Logout', href: '/logout'}
+    { icon: LogOut, label: 'Logout', href: '/logout' }
   ];
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Navigation Bar */}
@@ -438,7 +424,7 @@ export default function EditProfilePage() {
                 <h1 className="text-2xl font-bold text-slate-800">CreditView</h1>
               </div>
             </div>
-            
+
             {/* Desktop Navigation */}
             <div className="hidden lg:flex space-x-1">
               {navItems.map((item) => (
@@ -452,7 +438,7 @@ export default function EditProfilePage() {
                 </a>
               ))}
             </div>
-            
+
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -462,7 +448,7 @@ export default function EditProfilePage() {
             </button>
           </div>
         </div>
-        
+
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white">
@@ -481,14 +467,14 @@ export default function EditProfilePage() {
           </div>
         )}
       </nav>
-      
+
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h2 className="text-3xl font-bold text-slate-800 mb-2">Edit Profile</h2>
           <p className="text-slate-600">Update your personal information and preferences</p>
         </div>
-        
+
         {/* Success Message */}
         {successMessage && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center">
@@ -496,7 +482,7 @@ export default function EditProfilePage() {
             <span className="text-sm text-green-800 font-medium">{successMessage}</span>
           </div>
         )}
-        
+
         {/* Profile Form */}
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <div className="space-y-6">
@@ -506,7 +492,7 @@ export default function EditProfilePage() {
                 <User className="w-5 h-5 mr-2" />
                 Personal Information
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Full Name */}
                 <div className="md:col-span-2">
@@ -522,7 +508,7 @@ export default function EditProfilePage() {
                     placeholder="John Doe"
                   />
                 </div>
-                
+
                 {/* Email */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -540,7 +526,7 @@ export default function EditProfilePage() {
                     />
                   </div>
                 </div>
-                
+
                 {/* Phone */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -558,7 +544,7 @@ export default function EditProfilePage() {
                     />
                   </div>
                 </div>
-                
+
                 {/* Date of Birth */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -586,7 +572,7 @@ export default function EditProfilePage() {
               </h3>
 
               <p className="mb-4 text-sm text-red-500">Current Password Needed to make New Password</p>
-              
+
               <div className="space-y-4">
                 {/* Current Password */}
                 <div>
@@ -612,7 +598,7 @@ export default function EditProfilePage() {
                     </button>
                   </div>
                 </div>
-                
+
                 {/* New Password */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -640,7 +626,7 @@ export default function EditProfilePage() {
                     Must be at least 8 characters with uppercase, lowercase, and numbers
                   </p>
                 </div>
-                
+
                 {/* Confirm New Password */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -667,19 +653,19 @@ export default function EditProfilePage() {
                 </div>
               </div>
             </div>
-            
+
             {/* Web3 Wallet Section */}
             <div className="pt-6 border-t border-slate-200">
               <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
                 <Wallet className="w-5 h-5 mr-2" />
                 Web3 Wallet Connection
               </h3>
-              
+
               <div className="space-y-4">
                 <p className="text-sm text-slate-600">
                   Connect your MetaMask wallet to enable blockchain-based features and cryptocurrency transactions.
                 </p>
-                
+
                 {/* Security Notice */}
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                   <div className="flex items-start">
@@ -692,7 +678,7 @@ export default function EditProfilePage() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Wallet Error Message */}
                 {walletError && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
@@ -703,7 +689,7 @@ export default function EditProfilePage() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Wallet Connected Status */}
                 {walletAddress ? (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -750,7 +736,7 @@ export default function EditProfilePage() {
                     </button>
                   </div>
                 )}
-                
+
                 {/* Info Box */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <h4 className="text-sm font-semibold text-blue-900 mb-2 flex items-center">
@@ -778,7 +764,7 @@ export default function EditProfilePage() {
                 </div>
               </div>
             </div>
-            
+
             {/* Save Button */}
             <div className="pt-6 border-t border-slate-200">
               <button
