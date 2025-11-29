@@ -407,8 +407,8 @@ export default function EditProfilePage() {
   }
 
   const navItems = [
-    { icon: CreditCard, label: 'Dashboard', href: '/borrower/dashboard' },
-    { icon: DollarSign, label: 'Loan Portal', href: '/borrower/loans' },
+    { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout' }
   ];

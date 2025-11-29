@@ -1,152 +1,149 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, DollarSign, User, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle } from 'lucide-react';
+import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Clock, TrendingUp } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
-export default function LoanRequestPage() {
+export default function BorrowerLoanStatus() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasCreditScore, setHasCreditScore] = useState(false);
-  const [userCreditScore, setUserCreditScore] = useState(null);
-  const [creditBand, setCreditBand] = useState(null);
-  const [creditReasons, setCreditReasons] = useState([]);
-  const [userName, setUserName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [loanRequests, setLoanRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  const [loanRequest, setLoanRequest] = useState({
-    loanType: '',
-    loanAmount: '',
-    loanPurpose: '',
-    loanTerm: ''
-  });
+  // TODO: Replace with actual logged-in user's email from your auth system
+  const userEmail = localStorage.getItem('userEmail'); // Get this from your auth context/session
   
   useEffect(() => {
-    const email = localStorage.getItem('userEmail');
-    if (!email) {
-      window.location.href = "/";
-      return;
-    }
-    setUserEmail(email);
-    
-    // Fetch user data and credit score from Supabase
-    const fetchUserData = async () => {
-      const { data, error } = await supabase
-        .from('Account')
-        .select('name, credit_score, credit_reasons')
-        .eq('email', email)
-        .maybeSingle();
-      
-      if (data) {
-        setUserName(data.name || 'User');
-        if (data.credit_score) {
-          setUserCreditScore(data.credit_score);
-          setCreditBand(getCreditBand(data.credit_score));
-          setHasCreditScore(true);
-          setCreditReasons(data.credit_reasons || []);
-        }
-      }
-    };
-    
-    fetchUserData();
-  }, []);
-  
-  const getCreditBand = (score) => {
-    if (score >= 800) return 'Excellent';
-    if (score >= 740) return 'Very Good';
-    if (score >= 670) return 'Good';
-    if (score >= 580) return 'Fair';
-    return 'Poor';
-  };
-  
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setLoanRequest({
-      ...loanRequest,
-      [name]: value
-    });
-  };
-  
-  const getLoanTypeLabel = (type) => {
-    const labels = {
-      'personal': 'Personal Loan',
-      'home': 'Home Loan',
-      'auto': 'Auto Loan',
-      'student': 'Student Loan',
-      'business': 'Business Loan'
-    };
-    return labels[type] || type;
-  };
-  
-  const handleSubmit = async () => {
-    if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose) {
-      alert('Please fill in all required fields');
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      const requestId = `LR-${Date.now()}`;
-      const requestDate = new Date().toISOString().split('T')[0];
+    fetchMyLoanRequests();
+  }, [filterStatus]);
 
-      const { data, error } = await supabase
+  
+  const fetchMyLoanRequests = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      let query = supabase
         .from('loan_requests')
-        .insert({
-          request_id: requestId,
-          borrower_email: userEmail,
-          borrower_name: userName,
-          loan_type: getLoanTypeLabel(loanRequest.loanType),
-          loan_amount: parseFloat(loanRequest.loanAmount),
-          loan_term: parseInt(loanRequest.loanTerm),
-          loan_purpose: loanRequest.loanPurpose,
-          credit_score: userCreditScore,
-          credit_band: creditBand,
-          reasons: creditReasons,
-          request_date: requestDate,
-          status: 'pending'
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('borrower_email', userEmail) // Only get loans for this borrower
+        .order('created_at', { ascending: false });
+
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
-        console.error('Failed to submit loan request:', error);
-        alert('Failed to submit loan request: ' + error.message);
-      } else {
-        alert(
-          `Loan request submitted successfully! Request ID: ${requestId}\n\nYou will receive a response within 24-48 hours.`
-        );
-
-        // Reset form
-        setLoanRequest({
-          loanType: '',
-          loanAmount: '',
-          loanPurpose: '',
-          loanTerm: ''
-        });
+        console.error('Error fetching loan requests:', error);
+        setError('Failed to load your loan requests');
+        setLoanRequests([]);
+        return;
       }
-    } catch (error) {
-      console.error('Error submitting loan request:', error);
-      alert('An error occurred while submitting your request. Please try again.');
+
+      const mapped = (data || []).map((req) => ({
+        id: req.request_id,
+        borrowerName: req.borrower_name,
+        email: req.borrower_email,
+        loanType: req.loan_type,
+        loanAmount: Number(req.loan_amount),
+        loanTerm: req.loan_term,
+        loanPurpose: req.loan_purpose,
+        creditScore: req.credit_score,
+        creditBand: req.credit_band,
+        reasons: Array.isArray(req.reasons) ? req.reasons : [],
+        requestDate: req.request_date,
+        status: req.status,
+        createdAt: req.created_at,
+      }));
+
+      setLoanRequests(mapped);
+    } catch (err) {
+      console.error('Error fetching loan requests:', err);
+      setError('Failed to connect to server');
+      setLoanRequests([]);
     } finally {
       setIsLoading(false);
     }
   };
   
+  const getScoreColor = (score) => {
+    if (score >= 800) return 'text-green-600 bg-green-50';
+    if (score >= 740) return 'text-blue-600 bg-blue-50';
+    if (score >= 670) return 'text-yellow-600 bg-yellow-50';
+    if (score >= 580) return 'text-orange-600 bg-orange-50';
+    return 'text-red-600 bg-red-50';
+  };
+  
+  const getStatusBadge = (status) => {
+    switch(status) {
+      case 'pending':
+        return (
+          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            Pending Review
+          </span>
+        );
+      case 'approved':
+        return (
+          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" />
+            Approved
+          </span>
+        );
+      case 'denied':
+        return (
+          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 flex items-center gap-1">
+            <XCircle className="w-3 h-3" />
+            Denied
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+  
+  const getStatusMessage = (status) => {
+    switch(status) {
+      case 'pending':
+        return {
+          title: 'Application Under Review',
+          message: 'Your loan application is being reviewed by our lending team. You will receive an update within 24-48 hours.',
+          color: 'bg-yellow-50 border-yellow-200 text-yellow-800'
+        };
+      case 'approved':
+        return {
+          title: 'Congratulations! Your Loan is Approved',
+          message: 'Your loan application has been approved! Our team will contact you shortly with the next steps and loan agreement details.',
+          color: 'bg-green-50 border-green-200 text-green-800'
+        };
+      case 'denied':
+        return {
+          title: 'Application Not Approved',
+          message: 'Unfortunately, your loan application was not approved at this time. You may reapply after 30 days or contact us for more information.',
+          color: 'bg-red-50 border-red-200 text-red-800'
+        };
+      default:
+        return null;
+    }
+  };
+  
   const navItems = [
-    { icon: CreditCard,label: 'Dashboard', href: '/borrower/dashboard'},
-    { icon: DollarSign, label: 'Loan Portal', href: '/borrower/loans' },
+    { icon: TrendingUp, label: 'Credit Score', href: '/borrower/credit-score' },
+    { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
   
-  const loanTypes = [
-    { value: 'personal', label: 'Personal Loan', icon: User },
-    { value: 'home', label: 'Home/Mortgage Loan', icon: Home },
-    { value: 'auto', label: 'Auto Loan', icon: Car },
-    { value: 'student', label: 'Student Loan', icon: GraduationCap },
-    { value: 'business', label: 'Business Loan', icon: Briefcase }
-  ];
+  const stats = {
+    total: loanRequests.length,
+    pending: loanRequests.filter(r => r.status === 'pending').length,
+    approved: loanRequests.filter(r => r.status === 'approved').length,
+    denied: loanRequests.filter(r => r.status === 'denied').length,
+  };
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -202,174 +199,231 @@ export default function LoanRequestPage() {
       
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">Request a Loan</h2>
-          <p className="text-slate-600">Complete the form below to submit your loan application</p>
+        <div className="mb-6">
+          <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
+          <p className="text-slate-600">Track the status of your loan requests</p>
         </div>
         
-        {/* Credit Check Warning/Success Banner */}
-        {!hasCreditScore ? (
-          <div className="max-w-3xl mx-auto mb-6">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
-              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-red-800 mb-1">Credit Check Required</h3>
-                <p className="text-sm text-red-700 mb-3">
-                  You must complete a credit check on the dashboard before you can request a loan.
-                </p>
-                <a
-                  href="/borrower/dashboard"
-                  className="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
-                >
-                  Go to Dashboard
-                </a>
-              </div>
-            </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow p-4">
+            <p className="text-sm text-slate-600 mb-1">Total Applications</p>
+            <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
           </div>
-        ) : (
-          <div className="max-w-3xl mx-auto mb-6">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
-              <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-green-800 mb-1">Credit Check Complete</h3>
-                <p className="text-sm text-green-700">
-                  Your credit score: <span className="font-bold">{userCreditScore}</span> ({creditBand}) - You're eligible to apply for loans
-                </p>
-              </div>
-            </div>
+          <div className="bg-yellow-50 rounded-lg shadow p-4 border border-yellow-200">
+            <p className="text-sm text-yellow-700 mb-1">Pending Review</p>
+            <p className="text-2xl font-bold text-yellow-800">{stats.pending}</p>
+          </div>
+          <div className="bg-green-50 rounded-lg shadow p-4 border border-green-200">
+            <p className="text-sm text-green-700 mb-1">Approved</p>
+            <p className="text-2xl font-bold text-green-800">{stats.approved}</p>
+          </div>
+          <div className="bg-red-50 rounded-lg shadow p-4 border border-red-200">
+            <p className="text-sm text-red-700 mb-1">Denied</p>
+            <p className="text-2xl font-bold text-red-800">{stats.denied}</p>
+          </div>
+        </div>
+        
+        {/* Filter Tabs */}
+        <div className="mb-6 flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilterStatus('all')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'all'
+                ? 'bg-slate-800 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            All Applications ({stats.total})
+          </button>
+          <button
+            onClick={() => setFilterStatus('pending')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'pending'
+                ? 'bg-yellow-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Pending ({stats.pending})
+          </button>
+          <button
+            onClick={() => setFilterStatus('approved')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'approved'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Approved ({stats.approved})
+          </button>
+          <button
+            onClick={() => setFilterStatus('denied')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'denied'
+                ? 'bg-red-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Denied ({stats.denied})
+          </button>
+        </div>
+        
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">{error}</p>
           </div>
         )}
         
-        {/* Loan Request Form */}
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-lg p-8">
-            <div className={`space-y-6 ${!hasCreditScore ? 'opacity-50 pointer-events-none' : ''}`}>
-              {/* Loan Type Selection */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-3">
-                  Loan Type <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {loanTypes.map((type) => (
-                    <button
-                      key={type.value}
-                      onClick={() => setLoanRequest({ ...loanRequest, loanType: type.value })}
-                      className={`flex items-center p-4 border-2 rounded-lg transition-all ${
-                        loanRequest.loanType === type.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <type.icon className={`w-6 h-6 mr-3 ${
-                        loanRequest.loanType === type.value ? 'text-blue-600' : 'text-slate-400'
-                      }`} />
-                      <span className={`font-medium ${
-                        loanRequest.loanType === type.value ? 'text-blue-900' : 'text-slate-700'
-                      }`}>
-                        {type.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Loan Amount and Term */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Loan Amount <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-2.5 text-slate-500">$</span>
-                    <input
-                      type="number"
-                      name="loanAmount"
-                      value={loanRequest.loanAmount}
-                      onChange={handleInputChange}
-                      className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="50000"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Loan Term <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="loanTerm"
-                    value={loanRequest.loanTerm}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800"></div>
+            <p className="mt-2 text-slate-600">Loading your loan applications...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Requests List */}
+            <div className="space-y-4">
+              {loanRequests.length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-8 text-center">
+                  <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold text-slate-800 mb-2">No Applications Found</h3>
+                  <p className="text-slate-600 mb-4">You haven't submitted any loan applications yet.</p>
+                  <a
+                    href="/borrower/loans/loan-request"
+                    className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
                   >
-                    <option value="">Select term</option>
-                    <option value="12">12 months</option>
-                    <option value="24">24 months</option>
-                    <option value="36">36 months</option>
-                    <option value="48">48 months</option>
-                    <option value="60">60 months</option>
-                    <option value="120">120 months (10 years)</option>
-                    <option value="180">180 months (15 years)</option>
-                    <option value="240">240 months (20 years)</option>
-                    <option value="360">360 months (30 years)</option>
-                  </select>
+                    Apply for a Loan
+                  </a>
                 </div>
-              </div>
-              
-              {/* Loan Purpose */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Loan Purpose <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  name="loanPurpose"
-                  value={loanRequest.loanPurpose}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Describe what you'll use the loan for..."
-                  rows="3"
-                />
-              </div>
-              
-              {/* Submit Button */}
-              <button
-                onClick={handleSubmit}
-                disabled={isLoading || !hasCreditScore}
-                className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Submitting Request...' : 'Submit Loan Request'}
-              </button>
+              ) : (
+                loanRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className={`bg-white rounded-lg shadow-md p-6 cursor-pointer transition-all hover:shadow-lg ${
+                      selectedRequest?.id === request.id ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => setSelectedRequest(request)}
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-800">{request.loanType} </h3>
+                        <p className="text-xs text-slate-500">Applied on {request.requestDate}</p>
+                      </div>
+                      {getStatusBadge(request.status)}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <p className="text-xs text-slate-500">Amount Requested</p>
+                        <p className="text-sm font-semibold text-slate-700">${request.loanAmount.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Loan Term</p>
+                        <p className="text-sm font-semibold text-slate-700">{request.loanTerm} months</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Credit Score</p>
+                        <p className={`text-sm font-bold px-2 py-1 rounded inline-block ${getScoreColor(request.creditScore)}`}>
+                          {request.creditScore}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Application ID</p>
+                        <p className="text-xs font-mono text-slate-700">{request.id.substring(0, 8)}...</p>
+                      </div>
+                    </div>
+                    
+                    <button className="w-full mt-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-md transition-colors flex items-center justify-center">
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Details
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            
+            {/* Request Details Panel */}
+            <div className="lg:sticky lg:top-8 h-fit">
+              {!selectedRequest ? (
+                <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                  <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">Select an Application</h3>
+                  <p className="text-slate-600">Click on a loan application to view details</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  {/* Status Alert */}
+                  {selectedRequest.status && (
+                    <div className={`rounded-lg p-4 mb-4 border ${getStatusMessage(selectedRequest.status).color}`}>
+                      <h4 className="font-semibold mb-1">{getStatusMessage(selectedRequest.status).title}</h4>
+                      <p className="text-sm">{getStatusMessage(selectedRequest.status).message}</p>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} Loan</h3>
+                      <p className="text-sm text-slate-500">Application ID: {selectedRequest.id}</p>
+                    </div>
+                    {getStatusBadge(selectedRequest.status)}
+                  </div>
+                  
+                  <div className="border-t border-slate-200 pt-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Loan Details</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-slate-600">Amount Requested:</span>
+                        <span className="text-sm font-semibold text-slate-800">${selectedRequest.loanAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-slate-600">Loan Term:</span>
+                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.loanTerm} months</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-slate-600">Application Date:</span>
+                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.requestDate}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="border-t border-slate-200 pt-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-2">Loan Purpose</h4>
+                    <p className="text-sm text-slate-600">{selectedRequest.loanPurpose}</p>
+                  </div>
+                  
+                  <div className="border-t border-slate-200 pt-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Your Credit Score</h4>
+                    <div className={`text-center py-4 rounded-lg ${getScoreColor(selectedRequest.creditScore)}`}>
+                      <div className="text-4xl font-bold">{selectedRequest.creditScore}</div>
+                      <div className="text-sm font-semibold mt-1">{selectedRequest.creditBand}</div>
+                    </div>
+                  </div>
+                  
+                  {Array.isArray(selectedRequest.reasons) && selectedRequest.reasons.length > 0 && (
+                    <div className="border-t border-slate-200 pt-4">
+                      <h4 className="text-sm font-semibold text-slate-700 mb-3">Credit Factors Considered</h4>
+                      <div className="space-y-2">
+                        {selectedRequest.reasons.map((reason, index) => (
+                          <div
+                            key={index}
+                            className="flex items-start bg-slate-50 rounded-lg p-3"
+                          >
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">
+                              {index + 1}
+                            </div>
+                            <p className="text-sm text-slate-700">{reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        </div>
-        
-        {/* Information Box */}
-        <div className="max-w-3xl mx-auto mt-8">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-blue-900 mb-2 flex items-center">
-              <HelpCircle className="w-5 h-5 mr-2" />
-              What Happens Next?
-            </h3>
-            <ul className="space-y-2 text-sm text-blue-800">
-              <li className="flex items-start">
-                <span className="font-bold mr-2">1.</span>
-                <span>Your application will be reviewed by our lending team within 24-48 hours</span>
-              </li>
-              <li className="flex items-start">
-                <span className="font-bold mr-2">2.</span>
-                <span>We may contact you for additional documentation or information</span>
-              </li>
-              <li className="flex items-start">
-                <span className="font-bold mr-2">3.</span>
-                <span>You'll receive loan offers from multiple lenders with terms and rates</span>
-              </li>
-              <li className="flex items-start">
-                <span className="font-bold mr-2">4.</span>
-                <span>Review and accept the offer that works best for you</span>
-              </li>
-            </ul>
-          </div>
-        </div>
+        )}
       </main>
     </div>
   );

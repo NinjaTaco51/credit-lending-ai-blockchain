@@ -108,7 +108,7 @@ export default function AuthPages() {
       if (passwordCorrect) {
         if (userType === data.type) {
           localStorage.setItem('userEmail', loginData.email);
-          window.location.href = "/borrower/dashboard";
+          window.location.href = "/borrower/credit-score";
         } else {
           alert("Please select correct portal type")
           setIsLoading(false);
