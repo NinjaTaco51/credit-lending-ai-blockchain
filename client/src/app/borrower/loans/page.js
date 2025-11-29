@@ -117,13 +117,13 @@ export default function BorrowerLoanStatus() {
       case 'approved':
         return {
           title: 'Congratulations! Your Loan is Approved',
-          message: 'Your loan application has been approved! Our team will contact you shortly with the next steps and loan agreement details.',
+          message: 'Your loan application has been approved!',
           color: 'bg-green-50 border-green-200 text-green-800'
         };
       case 'denied':
         return {
           title: 'Application Not Approved',
-          message: 'Unfortunately, your loan application was not approved at this time. You may reapply after 30 days or contact us for more information.',
+          message: 'Unfortunately, your loan application was not approved at this time. You may reapply.',
           color: 'bg-red-50 border-red-200 text-red-800'
         };
       default:
@@ -364,7 +364,7 @@ export default function BorrowerLoanStatus() {
                   
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} Loan</h3>
+                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} </h3>
                       <p className="text-sm text-slate-500">Application ID: {selectedRequest.id}</p>
                     </div>
                     {getStatusBadge(selectedRequest.status)}
