@@ -49,7 +49,7 @@ export default function LenderDashboard() {
         loanPurpose: req.loan_purpose,
         creditScore: req.credit_score,
         creditBand: req.credit_band,
-        reasons: req.reasons || [],
+        reasons: Array.isArray(req.reasons) ? req.reasons : [],
         requestDate: req.request_date,
         status: req.status,
       }));
@@ -361,12 +361,15 @@ export default function LenderDashboard() {
                     </div>
                   </div>
                   
-                  {selectedRequest.reasons && selectedRequest.reasons.length > 0 && (
+                  {Array.isArray(selectedRequest.reasons) && selectedRequest.reasons.length > 0 && (
                     <div className="border-t border-slate-200 pt-4 mb-6">
                       <h4 className="text-sm font-semibold text-slate-700 mb-3">Key Credit Factors</h4>
                       <div className="space-y-2">
                         {selectedRequest.reasons.map((reason, index) => (
-                          <div key={index} className="flex items-start bg-slate-50 rounded-lg p-3">
+                          <div
+                            key={index}
+                            className="flex items-start bg-slate-50 rounded-lg p-3"
+                          >
                             <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">
                               {index + 1}
                             </div>
