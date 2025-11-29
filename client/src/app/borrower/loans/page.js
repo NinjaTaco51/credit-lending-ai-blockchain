@@ -142,13 +142,13 @@ export default function BorrowerLoanStatus() {
       case 'approved':
         return {
           title: 'Congratulations! Your Loan is Approved',
-          message: 'Your loan application has been approved! Our team will contact you shortly with the next steps and loan agreement details.',
+          message: 'Your loan application has been approved!',
           color: 'bg-green-50 border-green-200 text-green-800'
         };
       case 'denied':
         return {
           title: 'Application Not Approved',
-          message: 'Unfortunately, your loan application was not approved at this time. You may reapply after 30 days or contact us for more information.',
+          message: 'Unfortunately, your loan application was not approved at this time. You may reapply',
           color: 'bg-red-50 border-red-200 text-red-800'
         };
       default:
@@ -324,7 +324,7 @@ export default function BorrowerLoanStatus() {
                 <div className="bg-white rounded-lg shadow p-8 text-center">
                   <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
                   <h3 className="text-lg font-semibold text-slate-800 mb-2">No Applications Found</h3>
-                  <p className="text-slate-600 mb-4">You haven't submitted any loan applications yet.</p>
+                  <p className="text-slate-600 mb-4"></p>
                   <a
                     href="/borrower/loans/loan-request"
                     className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
@@ -343,7 +343,7 @@ export default function BorrowerLoanStatus() {
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-800">{request.loanType} Loan</h3>
+                        <h3 className="text-lg font-bold text-slate-800">{request.loanType} </h3>
                         <p className="text-xs text-slate-500">Applied on {request.requestDate}</p>
                       </div>
                       {getStatusBadge(request.status)}
@@ -399,7 +399,7 @@ export default function BorrowerLoanStatus() {
                   
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} Loan</h3>
+                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} </h3>
                       <p className="text-sm text-slate-500">Application ID: {selectedRequest.id}</p>
                     </div>
                     {getStatusBadge(selectedRequest.status)}
