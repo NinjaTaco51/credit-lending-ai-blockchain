@@ -9,16 +9,33 @@ export default function BorrowerLoanStatus() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [loanRequests, setLoanRequests] = useState([]);
+  const [allLoanRequests, setAllLoanRequests] = useState([]); // Store ALL loans unfiltered
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
   // TODO: Replace with actual logged-in user's email from your auth system
+  // For testing, check what email you used when submitting loan requests
   const userEmail = localStorage.getItem('userEmail'); // Get this from your auth context/session
+  
+  // Debug: Log what we're searching for
+  useEffect(() => {
+    console.log('🔍 Searching for loan requests with email:', userEmail);
+  }, []);
   
   useEffect(() => {
     fetchMyLoanRequests();
-  }, [filterStatus]);
-
+  }, []); // Only fetch once on mount
+  
+  // Filter locally when filterStatus changes
+  useEffect(() => {
+    if (allLoanRequests.length > 0) {
+      if (filterStatus === 'all') {
+        setLoanRequests(allLoanRequests);
+      } else {
+        setLoanRequests(allLoanRequests.filter(req => req.status === filterStatus));
+      }
+    }
+  }, [filterStatus, allLoanRequests]);
   
   const fetchMyLoanRequests = async () => {
     try {
@@ -31,10 +48,7 @@ export default function BorrowerLoanStatus() {
         .eq('borrower_email', userEmail) // Only get loans for this borrower
         .order('created_at', { ascending: false });
 
-      if (filterStatus !== 'all') {
-        query = query.eq('status', filterStatus);
-      }
-
+      // Don't filter by status here - get ALL loans
       const { data, error } = await query;
 
       if (error) {
@@ -43,6 +57,9 @@ export default function BorrowerLoanStatus() {
         setLoanRequests([]);
         return;
       }
+
+      console.log('📊 Found loan requests:', data?.length || 0);
+      console.log('📋 Raw data:', data);
 
       const mapped = (data || []).map((req) => ({
         id: req.request_id,
@@ -60,7 +77,15 @@ export default function BorrowerLoanStatus() {
         createdAt: req.created_at,
       }));
 
-      setLoanRequests(mapped);
+      // Store ALL loans
+      setAllLoanRequests(mapped);
+      
+      // Set filtered loans based on current filter
+      if (filterStatus === 'all') {
+        setLoanRequests(mapped);
+      } else {
+        setLoanRequests(mapped.filter(req => req.status === filterStatus));
+      }
     } catch (err) {
       console.error('Error fetching loan requests:', err);
       setError('Failed to connect to server');
@@ -117,13 +142,13 @@ export default function BorrowerLoanStatus() {
       case 'approved':
         return {
           title: 'Congratulations! Your Loan is Approved',
-          message: 'Your loan application has been approved!',
+          message: 'Your loan application has been approved! Our team will contact you shortly with the next steps and loan agreement details.',
           color: 'bg-green-50 border-green-200 text-green-800'
         };
       case 'denied':
         return {
           title: 'Application Not Approved',
-          message: 'Unfortunately, your loan application was not approved at this time. You may reapply.',
+          message: 'Unfortunately, your loan application was not approved at this time. You may reapply after 30 days or contact us for more information.',
           color: 'bg-red-50 border-red-200 text-red-800'
         };
       default:
@@ -132,17 +157,17 @@ export default function BorrowerLoanStatus() {
   };
   
   const navItems = [
-    { icon: TrendingUp, label: 'Credit Score', href: '/borrower/credit-score' },
-    { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: TrendingUp, label: 'Dashboard', href: '/borrower/dashboard' },
+    { icon: DollarSign, label: 'My Loans', href: '/borrower/my-loans' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
   
   const stats = {
-    total: loanRequests.length,
-    pending: loanRequests.filter(r => r.status === 'pending').length,
-    approved: loanRequests.filter(r => r.status === 'approved').length,
-    denied: loanRequests.filter(r => r.status === 'denied').length,
+    total: allLoanRequests.length,
+    pending: allLoanRequests.filter(r => r.status === 'pending').length,
+    approved: allLoanRequests.filter(r => r.status === 'approved').length,
+    denied: allLoanRequests.filter(r => r.status === 'denied').length,
   };
   
   return (
@@ -200,7 +225,17 @@ export default function BorrowerLoanStatus() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
+            <div className="flex items-center mb-4 justify-between"> 
+                
           <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
+          <a
+                    href="/borrower/loans/loan-request"
+                    className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    Apply for a Loan
+                  </a>
+          </div>
+          
           <p className="text-slate-600">Track the status of your loan requests</p>
         </div>
         
@@ -308,7 +343,7 @@ export default function BorrowerLoanStatus() {
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-800">{request.loanType} </h3>
+                        <h3 className="text-lg font-bold text-slate-800">{request.loanType} Loan</h3>
                         <p className="text-xs text-slate-500">Applied on {request.requestDate}</p>
                       </div>
                       {getStatusBadge(request.status)}
@@ -364,7 +399,7 @@ export default function BorrowerLoanStatus() {
                   
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} </h3>
+                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} Loan</h3>
                       <p className="text-sm text-slate-500">Application ID: {selectedRequest.id}</p>
                     </div>
                     {getStatusBadge(selectedRequest.status)}
