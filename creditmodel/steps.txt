@@ -12,4 +12,4 @@ pip install -r requirements.txt
 python .\server\model.py
 
 # Run the application
-python -m uvicorn server.app:app --host 0.0.0.0 --port 8080 --reload
+uvicorn server.app:app --reload --port 8080

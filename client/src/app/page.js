@@ -295,7 +295,7 @@ export default function AuthPages() {
                       name="email"
                       value={loginData.email}
                       onChange={handleLoginChange}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                       placeholder="john@example.com"
                     />
                   </div>
@@ -313,7 +313,7 @@ export default function AuthPages() {
                       name="password"
                       value={loginData.password}
                       onChange={handleLoginChange}
-                      className="w-full pl-10 pr-12 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-10 pr-12 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                       placeholder="••••••••"
                     />
                     <button
@@ -383,7 +383,7 @@ export default function AuthPages() {
                         name="fullName"
                         value={signupData.fullName}
                         onChange={handleSignupChange}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                         placeholder="John Doe"
                       />
                     </div>
@@ -402,7 +402,7 @@ export default function AuthPages() {
                         name="email"
                         value={signupData.email}
                         onChange={handleSignupChange}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                         placeholder="john@example.com"
                       />
                     </div>
@@ -420,7 +420,7 @@ export default function AuthPages() {
                         name="phone"
                         value={signupData.phone}
                         onChange={handleSignupChange}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                         placeholder="5551234567"
                       />
                     </div>
@@ -438,7 +438,7 @@ export default function AuthPages() {
                         name="dob"
                         value={signupData.dob}
                         onChange={handleSignupChange}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                       />
                     </div>
                   </div>
@@ -455,7 +455,7 @@ export default function AuthPages() {
                         name="password"
                         value={signupData.password}
                         onChange={handleSignupChange}
-                        className="w-full pl-10 pr-12 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-10 pr-12 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                         placeholder="••••••••"
                       />
                       <button
@@ -483,7 +483,7 @@ export default function AuthPages() {
                         name="confirmPassword"
                         value={signupData.confirmPassword}
                         onChange={handleSignupChange}
-                        className="w-full pl-10 pr-12 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-10 pr-12 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
                         placeholder="••••••••"
                       />
                       <button
