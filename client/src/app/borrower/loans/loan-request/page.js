@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, DollarSign, User, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle } from 'lucide-react';
+import { CreditCard, DollarSign, User, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle, Wallet } from 'lucide-react';
 import supabase from "../../../../config/supabaseClient"
 
 export default function LoanRequestPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [hasCreditScore, setHasCreditScore] = useState(false);
+  const [hasWallet, setHasWallet] = useState(false);
   const [userCreditScore, setUserCreditScore] = useState(null);
   const [creditBand, setCreditBand] = useState(null);
   const [creditReasons, setCreditReasons] = useState([]);
@@ -29,21 +30,32 @@ export default function LoanRequestPage() {
     }
     setUserEmail(email);
     
-    // Fetch user data and credit score from Supabase
+    // Fetch user data, credit score, and wallet address from Supabase
     const fetchUserData = async () => {
       const { data, error } = await supabase
         .from('Account')
-        .select('name, credit_score, credit_reasons')
+        .select('name, credit_score, credit_reasons, wallet_address')
         .eq('email', email)
         .maybeSingle();
       
       if (data) {
         setUserName(data.name || 'User');
+        
+        // Check credit score
         if (data.credit_score) {
           setUserCreditScore(data.credit_score);
           setCreditBand(getCreditBand(data.credit_score));
           setHasCreditScore(true);
           setCreditReasons(data.credit_reasons || []);
+        }
+        
+        // Check wallet connection
+        if (data.wallet_address) {
+          setHasWallet(true);
+          console.log('✅ Wallet connected:', data.wallet_address);
+        } else {
+          setHasWallet(false);
+          console.log('❌ No wallet connected');
         }
       }
     };
@@ -81,6 +93,12 @@ export default function LoanRequestPage() {
   const handleSubmit = async () => {
     if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose) {
       alert('Please fill in all required fields');
+      return;
+    }
+    
+    // Double-check wallet connection before submission
+    if (!hasWallet) {
+      alert('Please connect your MetaMask wallet before submitting a loan request.');
       return;
     }
     
@@ -148,6 +166,8 @@ export default function LoanRequestPage() {
     { value: 'business', label: 'Business Loan', icon: Briefcase }
   ];
   
+  const canSubmitLoan = hasCreditScore && hasWallet;
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Navigation Bar */}
@@ -207,6 +227,28 @@ export default function LoanRequestPage() {
           <p className="text-slate-600">Complete the form below to submit your loan application</p>
         </div>
         
+        {/* MetaMask Wallet Warning */}
+        {!hasWallet && (
+          <div className="max-w-3xl mx-auto mb-6">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start">
+              <Wallet className="w-5 h-5 text-orange-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-orange-800 mb-1">MetaMask Wallet Required</h3>
+                <p className="text-sm text-orange-700 mb-3">
+                  You must connect your MetaMask wallet before requesting a loan. This ensures secure blockchain-based transactions.
+                </p>
+                <a
+                  href="/borrower/profile"
+                  className="inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-md transition-colors"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  Connect Wallet in Profile
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Credit Check Warning/Success Banner */}
         {!hasCreditScore ? (
           <div className="max-w-3xl mx-auto mb-6">
@@ -243,7 +285,7 @@ export default function LoanRequestPage() {
         {/* Loan Request Form */}
         <div className="max-w-3xl mx-auto">
           <div className="bg-white rounded-2xl shadow-lg p-8">
-            <div className={`space-y-6 ${!hasCreditScore ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className={`space-y-6 ${!canSubmitLoan ? 'opacity-50 pointer-events-none' : ''}`}>
               {/* Loan Type Selection */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-3">
@@ -334,11 +376,20 @@ export default function LoanRequestPage() {
               {/* Submit Button */}
               <button
                 onClick={handleSubmit}
-                disabled={isLoading || !hasCreditScore}
+                disabled={isLoading || !canSubmitLoan}
                 className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? 'Submitting Request...' : 'Submit Loan Request'}
               </button>
+              
+              {/* Disabled State Message */}
+              {!canSubmitLoan && (
+                <p className="text-center text-sm text-slate-600 mt-2">
+                  {!hasCreditScore && !hasWallet ? 'Complete credit check and connect wallet to continue' :
+                   !hasCreditScore ? 'Complete credit check to continue' :
+                   'Connect MetaMask wallet to continue'}
+                </p>
+              )}
             </div>
           </div>
         </div>
