@@ -79,66 +79,67 @@ export default function LoanRequestPage() {
   };
 
   const handleSubmit = async () => {
-    if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose || !loanRequest.lenderEmail) {
-      alert('Please fill in all required fields');
+  if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose) {
+    alert('Please fill in all required fields');
+    return;
+  }
+
+  // Enforce SoFi email requirement for personal or student loans
+  if (['personal', 'student'].includes(loanRequest.loanType)) {
+    if (!userEmail.toLowerCase().endsWith("@sofi.com")) {
+      alert("You must request a personal or student loan from a Sofi email account (@sofi.com)");
       return;
     }
+  }
 
-    // NEW: Validate lender email
-    if (!loanRequest.lenderEmail.endsWith("@sofi.com")) {
-      alert("Lender email must be a valid @sofi.com address.");
-      return;
+  setIsLoading(true);
+
+  try {
+    const requestId = `LR-${Date.now()}`;
+    const requestDate = new Date().toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('loan_requests')
+      .insert({
+        request_id: requestId,
+        borrower_email: userEmail,
+        borrower_name: userName,
+        loan_type: getLoanTypeLabel(loanRequest.loanType),
+        loan_amount: parseFloat(loanRequest.loanAmount),
+        loan_term: parseInt(loanRequest.loanTerm),
+        loan_purpose: loanRequest.loanPurpose,
+        credit_score: userCreditScore,
+        credit_band: creditBand,
+        reasons: creditReasons,
+        request_date: requestDate,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to submit loan request:', error);
+      alert('Failed to submit loan request: ' + error.message);
+    } else {
+      alert(
+        `Loan request submitted successfully! Request ID: ${requestId}\n\nYou will receive a response within 24-48 hours.`
+      );
+
+      setLoanRequest({
+        loanType: '',
+        loanAmount: '',
+        loanPurpose: '',
+        loanTerm: ''
+      });
     }
+  } catch (error) {
+    console.error('Error submitting loan request:', error);
+    alert('An error occurred while submitting your request. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-    setIsLoading(true);
-
-    try {
-      const requestId = `LR-${Date.now()}`;
-      const requestDate = new Date().toISOString().split('T')[0];
-
-      const { data, error } = await supabase
-        .from('loan_requests')
-        .insert({
-          request_id: requestId,
-          borrower_email: userEmail,
-          borrower_name: userName,
-          lender_email: loanRequest.lenderEmail, // NEW
-          loan_type: getLoanTypeLabel(loanRequest.loanType),
-          loan_amount: parseFloat(loanRequest.loanAmount),
-          loan_term: parseInt(loanRequest.loanTerm),
-          loan_purpose: loanRequest.loanPurpose,
-          credit_score: userCreditScore,
-          credit_band: creditBand,
-          reasons: creditReasons,
-          request_date: requestDate,
-          status: 'pending'
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Failed to submit loan request:', error);
-        alert('Failed to submit loan request: ' + error.message);
-      } else {
-        alert(
-          `Loan request submitted successfully! Request ID: ${requestId}\n\nYou will receive a response within 24-48 hours.`
-        );
-
-        setLoanRequest({
-          loanType: '',
-          loanAmount: '',
-          loanPurpose: '',
-          loanTerm: '',
-          lenderEmail: '' // reset
-        });
-      }
-    } catch (error) {
-      console.error('Error submitting loan request:', error);
-      alert('An error occurred while submitting your request. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const navItems = [
     { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
