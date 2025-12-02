@@ -84,10 +84,10 @@ export default function BorrowerDashboard() {
       }
 
       const mapped = (data || []).map((req) => ({
-        id: req.request_id,
-        borrowerName: req.borrower_name,
+        id: req.id,                 // REAL Supabase PK (UUID)
+        requestId: req.request_id,  // The custom request_id string (user-facing)
         email: req.borrower_email,
-        lender_Email: req.lender_email,
+        borrowerName: req.borrower_name,
         loanType: req.loan_type,
         loanAmount: Number(req.loan_amount),
         loanTerm: req.loan_term,
@@ -95,8 +95,9 @@ export default function BorrowerDashboard() {
         creditScore: req.credit_score,
         creditBand: req.credit_band,
         reasons: Array.isArray(req.reasons) ? req.reasons : [],
-        requestDate: req.request_date,
         status: req.status,
+        requestDate: req.request_date,
+        lender_Email: req.lender_email,
       }));
 
       setLoanRequests(mapped);
@@ -119,15 +120,15 @@ export default function BorrowerDashboard() {
     }
   };
 
-  const handleApprove = async (requestId) => {
+  const handleApprove = async (id) => {
     if (!hasWallet) {
       alert('You must connect your MetaMask wallet before approving loans. Please visit your profile to connect.');
       return;
     }
     
     try {
-      // Get the loan request details
-      const request = loanRequests.find(r => r.id === requestId);
+      // Get the loan request details using the UUID id
+      const request = loanRequests.find(r => r.id === id);
       if (!request) {
         alert('Loan request not found');
         return;
@@ -173,45 +174,27 @@ export default function BorrowerDashboard() {
       const receipt = await tx.wait();
       console.log('Transaction confirmed! Block:', receipt.blockNumber);
       
-      // 2. UPDATE DATABASE WITH TRANSACTION INFO
-      const { error: updateError } = await supabase
+      // 2. UPDATE DATABASE WITH TRANSACTION INFO (using UUID id)
+      const { data: updateData, error } = await supabase
         .from('loan_requests')
         .update({ 
           status: 'approved',
           lender_email: lenderEmail,
           transaction_hash: receipt.hash,
-          block_number: receipt.blockNumber,
-          lender_address: lenderAddress,
-          borrower_address: borrowerData.wallet_address,
-          eth_amount: ethAmount
         })
-        .eq('request_id', requestId);
+        .eq('id', id)
+        .select(); // Use the UUID id, not request_id
 
-      if (updateError) {
-        console.error('Error updating database:', updateError);
-        alert('Transaction successful but failed to update database: ' + updateError.message);
+      if (error) {
+        console.error('Error updating database:', error);
+        console.error('Full error details:', JSON.stringify(error, null, 2));
+        alert('Transaction successful but failed to update database: ' + error.message);
         return;
       }
+      
+      console.log('Database updated successfully:', updateData);
 
-      // 3. OPTIONALLY: Save to transactions table for record keeping
-      const { error: txError } = await supabase
-        .from('blockchain_transactions')
-        .insert({
-          loan_request_id: requestId,
-          transaction_hash: receipt.hash,
-          block_number: receipt.blockNumber,
-          from_address: lenderAddress,
-          to_address: borrowerData.wallet_address,
-          amount: ethAmount,
-          transaction_type: 'loan_funding',
-          status: 'confirmed'
-        });
-
-      if (txError) {
-        console.error('Error saving transaction:', txError);
-      }
-
-      alert(`Loan request ${requestId} has been approved and funded! Transaction: ${receipt.hash}`);
+      alert(`Loan request ${request.requestId} has been approved and funded! Transaction: ${receipt.hash}`);
       fetchLoanRequests();
       setSelectedRequest(null);
       
@@ -229,27 +212,29 @@ export default function BorrowerDashboard() {
     }
   };
 
-  const handleDeny = async (requestId) => {
+  const handleDeny = async (id) => {
     if (!hasWallet) {
       alert('You must connect your MetaMask wallet before denying loans. Please visit your profile to connect.');
       return;
     }
     
     try {
+      // Get the loan request details for display purposes
+      const request = loanRequests.find(r => r.id === id);
+      
       // Get lender's wallet address
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const lenderAddress = await signer.getAddress();
       
-      // Update database (no blockchain transaction needed for denial)
+      // Update using UUID id
       const { error } = await supabase
         .from('loan_requests')
         .update({ 
           status: 'denied',
-          lender_email: lenderEmail,
-          lender_address: lenderAddress
+          lender_email: lenderEmail
         })
-        .eq('request_id', requestId);
+        .eq('id', id); // Use the UUID id, not request_id
 
       if (error) {
         console.error('Error denying loan:', error);
@@ -257,7 +242,7 @@ export default function BorrowerDashboard() {
         return;
       }
 
-      alert(`Loan request ${requestId} has been denied.`);
+      alert(`Loan request ${request?.requestId || id} has been denied.`);
       fetchLoanRequests();
       setSelectedRequest(null);
     } catch (err) {
@@ -453,7 +438,7 @@ export default function BorrowerDashboard() {
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <h3 className="text-lg font-bold text-slate-800">{request.borrowerName}</h3>
-                        <p className="text-sm text-slate-500">{request.id}</p>
+                        <p className="text-sm text-slate-500">{request.requestId}</p>
                       </div>
                       {getStatusBadge(request.status)}
                     </div>
@@ -511,7 +496,7 @@ export default function BorrowerDashboard() {
                     <div className="space-y-3">
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-600">Request ID:</span>
-                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.id}</span>
+                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.requestId}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-600">Loan Type:</span>

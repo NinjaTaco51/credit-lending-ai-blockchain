@@ -18,8 +18,7 @@ export default function LoanRequestPage() {
     loanType: '',
     loanAmount: '',
     loanPurpose: '',
-    loanTerm: '',
-    lenderEmail: '' // NEW
+    loanTerm: ''
   });
 
   useEffect(() => {
@@ -82,14 +81,6 @@ export default function LoanRequestPage() {
   if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose) {
     alert('Please fill in all required fields');
     return;
-  }
-
-  // Enforce SoFi email requirement for personal or student loans
-  if (['personal', 'student'].includes(loanRequest.loanType)) {
-    if (!userEmail.toLowerCase().endsWith("@sofi.com")) {
-      alert("You must request a personal or student loan from a Sofi email account (@sofi.com)");
-      return;
-    }
   }
 
   setIsLoading(true);
@@ -339,7 +330,7 @@ export default function LoanRequestPage() {
                 />
               </div>
 
-              {/* Lender Email (NEW) */}
+              {/* Lender Email (NEW) 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Lender Email (must be @sofi.com) <span className="text-red-500">*</span>
@@ -353,6 +344,7 @@ export default function LoanRequestPage() {
                   placeholder="example@sofi.com"
                 />
               </div>
+              */}
 
               {/* Submit Button */}
               <button
