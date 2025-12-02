@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, DollarSign, User, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle } from 'lucide-react';
+import { CreditCard, DollarSign, User, Menu, X, AlertCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle } from 'lucide-react';
 import supabase from "../../../../config/supabaseClient"
 
 export default function LoanRequestPage() {
@@ -19,7 +19,7 @@ export default function LoanRequestPage() {
     loanAmount: '',
     loanPurpose: '',
     loanTerm: '',
-    lenderEmail: '' // NEW
+    lenderEmail: ''
   });
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function LoanRequestPage() {
 
   // Enforce SoFi email requirement for personal or student loans
   if (['personal', 'student'].includes(loanRequest.loanType)) {
-    if (!userEmail.toLowerCase().endsWith("@sofi.com")) {
+    if (!loanRequest.lenderEmail.toLowerCase().endsWith("@sofi.com")) {
       alert("You must request a personal or student loan from a Sofi email account (@sofi.com)");
       return;
     }
@@ -129,7 +129,8 @@ export default function LoanRequestPage() {
         loanType: '',
         loanAmount: '',
         loanPurpose: '',
-        loanTerm: ''
+        loanTerm: '',
+        lenderEmail: ''
       });
     }
   } catch (error) {
@@ -236,16 +237,24 @@ export default function LoanRequestPage() {
           </div>
         ) : (
           <div className="max-w-3xl mx-auto mb-6">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
-              <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-green-800 mb-1">Credit Check Complete</h3>
-                <p className="text-sm text-green-700">
-                  Your credit score: <span className="font-bold">{userCreditScore}</span> ({creditBand}) - You're eligible to apply for loans
-                </p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+                {userCreditScore >= 580 ?               
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-green-800 mb-1">Credit Check Complete</h3>
+                  <p className="text-sm text-green-700">
+                    Your credit score: <span className="font-bold">{userCreditScore}</span> ({creditBand}) - You're eligible to apply for loans
+                  </p> 
+                </div> :
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-red-800 mb-1">Credit Check Complete</h3>
+                  <p className="text-sm text-red-700">
+                    Your credit score: <span className="font-bold">{userCreditScore}</span> ({creditBand}) - You may not be approved for loans based on your credit score
+                  </p>
+                </div>
+                }
               </div>
             </div>
-          </div>
         )}
 
         {/* Loan Request Form */}
@@ -294,7 +303,7 @@ export default function LoanRequestPage() {
                       name="loanAmount"
                       value={loanRequest.loanAmount}
                       onChange={handleInputChange}
-                      className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
                       placeholder="50000"
                     />
                   </div>
@@ -308,7 +317,7 @@ export default function LoanRequestPage() {
                     name="loanTerm"
                     value={loanRequest.loanTerm}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
                   >
                     <option value="">Select term</option>
                     <option value="12">12 months</option>
@@ -333,7 +342,7 @@ export default function LoanRequestPage() {
                   name="loanPurpose"
                   value={loanRequest.loanPurpose}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
                   placeholder="Describe what you'll use the loan for..."
                   rows="3"
                 />
@@ -342,14 +351,14 @@ export default function LoanRequestPage() {
               {/* Lender Email (NEW) */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Lender Email (must be @sofi.com) <span className="text-red-500">*</span>
+                  Lender Email <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
                   name="lenderEmail"
-                  value={loanRequest.lenderEmail}
+                  value={loanRequest.lenderEmail || ''}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
                   placeholder="example@sofi.com"
                 />
               </div>
