@@ -1,5 +1,6 @@
 'use client'
 
+import { ethers } from 'ethers';
 import React, { useState, useEffect } from 'react';
 import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Wallet } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
@@ -125,26 +126,106 @@ export default function BorrowerDashboard() {
     }
     
     try {
-      const { error } = await supabase
-        .from('loan_requests')
-        .update({ 
-          status: 'approved',
-          lender_email: lenderEmail
-         })
-        .eq('request_id', requestId);
-
-      if (error) {
-        console.error('Error approving loan:', error);
-        alert('Failed to approve loan request: ' + error.message);
+      // Get the loan request details
+      const request = loanRequests.find(r => r.id === requestId);
+      if (!request) {
+        alert('Loan request not found');
         return;
       }
 
-      alert(`Loan request ${requestId} has been approved!`);
+      // Get borrower's wallet address from database
+      const { data: borrowerData, error: borrowerError } = await supabase
+        .from('Account')
+        .select('wallet_address')
+        .eq('email', request.email)
+        .single();
+
+      if (borrowerError || !borrowerData?.wallet_address) {
+        alert('Borrower wallet address not found. Please ensure borrower has connected their MetaMask wallet.');
+        return;
+      }
+
+      // 1. SEND BLOCKCHAIN TRANSACTION
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const lenderAddress = await signer.getAddress();
+      
+      // Convert loan amount to ETH (you may need to adjust the conversion rate)
+      // For demo purposes, using a simple conversion: $1 = 0.0001 ETH
+      const ethAmount = (request.loanAmount * 0.0001).toFixed(4);
+      const amountInWei = ethers.parseEther(ethAmount.toString());
+      
+      console.log('Sending transaction...');
+      console.log('From (Lender):', lenderAddress);
+      console.log('To (Borrower):', borrowerData.wallet_address);
+      console.log('Amount:', ethAmount, 'ETH');
+      
+      // Send the ETH transaction
+      const tx = await signer.sendTransaction({
+        to: borrowerData.wallet_address,
+        value: amountInWei
+      });
+      
+      console.log('Transaction sent! Hash:', tx.hash);
+      alert('Transaction sent! Waiting for confirmation...');
+      
+      // Wait for transaction to be mined
+      const receipt = await tx.wait();
+      console.log('Transaction confirmed! Block:', receipt.blockNumber);
+      
+      // 2. UPDATE DATABASE WITH TRANSACTION INFO
+      const { error: updateError } = await supabase
+        .from('loan_requests')
+        .update({ 
+          status: 'approved',
+          lender_email: lenderEmail,
+          transaction_hash: receipt.hash,
+          block_number: receipt.blockNumber,
+          lender_address: lenderAddress,
+          borrower_address: borrowerData.wallet_address,
+          eth_amount: ethAmount
+        })
+        .eq('request_id', requestId);
+
+      if (updateError) {
+        console.error('Error updating database:', updateError);
+        alert('Transaction successful but failed to update database: ' + updateError.message);
+        return;
+      }
+
+      // 3. OPTIONALLY: Save to transactions table for record keeping
+      const { error: txError } = await supabase
+        .from('blockchain_transactions')
+        .insert({
+          loan_request_id: requestId,
+          transaction_hash: receipt.hash,
+          block_number: receipt.blockNumber,
+          from_address: lenderAddress,
+          to_address: borrowerData.wallet_address,
+          amount: ethAmount,
+          transaction_type: 'loan_funding',
+          status: 'confirmed'
+        });
+
+      if (txError) {
+        console.error('Error saving transaction:', txError);
+      }
+
+      alert(`Loan request ${requestId} has been approved and funded! Transaction: ${receipt.hash}`);
       fetchLoanRequests();
       setSelectedRequest(null);
+      
     } catch (err) {
       console.error('Error approving loan:', err);
-      alert('Failed to approve loan request');
+      
+      // Handle specific MetaMask errors
+      if (err.code === 4001) {
+        alert('Transaction rejected by user');
+      } else if (err.code === -32603) {
+        alert('Insufficient funds in wallet');
+      } else {
+        alert('Failed to approve loan request: ' + err.message);
+      }
     }
   };
 
@@ -155,11 +236,18 @@ export default function BorrowerDashboard() {
     }
     
     try {
+      // Get lender's wallet address
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const lenderAddress = await signer.getAddress();
+      
+      // Update database (no blockchain transaction needed for denial)
       const { error } = await supabase
         .from('loan_requests')
         .update({ 
           status: 'denied',
-          lender_email: lenderEmail
+          lender_email: lenderEmail,
+          lender_address: lenderAddress
         })
         .eq('request_id', requestId);
 
