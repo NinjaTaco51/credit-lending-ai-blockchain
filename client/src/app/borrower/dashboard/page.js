@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, XCircle, Clock, TrendingUp, LogOut } from 'lucide-react';
+import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, XCircle, Clock, TrendingUp, LogOut, CreditCard } from 'lucide-react';
 import supabase from "../../../config/supabaseClient";
 
 export default function BorrowerDashboard() {
@@ -141,6 +141,7 @@ export default function BorrowerDashboard() {
 
   const navItems = [
     { icon: TrendingUp, label: 'Credit Score', href: '/borrower/credit-score' },
+    { icon: CreditCard, label: 'Payments', href: '/borrower/payments' },
     { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout' },
