@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Eye, EyeOff, Mail, Lock, User, Phone, Calendar, Building2, UserCircle } from 'lucide-react';
+import bcrypt from "bcryptjs";
 import supabase from "../config/supabaseClient"
 
 export default function AuthPages() {
