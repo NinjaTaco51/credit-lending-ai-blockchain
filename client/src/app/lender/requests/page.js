@@ -2,7 +2,7 @@
 
 import { ethers } from 'ethers';
 import React, { useState, useEffect } from 'react';
-import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Wallet } from 'lucide-react';
+import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Wallet, TrendingUp } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
 export default function BorrowerDashboard() {
@@ -290,6 +290,7 @@ export default function BorrowerDashboard() {
   
   const navItems = [
     { icon: DollarSign, label: 'Loan Requests', href: '/lender/requests' },
+    { icon: TrendingUp, label: 'Payment Status', href: '/lender/payments' }, 
     { icon: User, label: 'Profile', href: '/lender/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
