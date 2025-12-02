@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Clock, TrendingUp } from 'lucide-react';
+import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Clock, CreditCard, BanknoteArrowDown } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
 export default function BorrowerLoanStatus() {
@@ -9,24 +9,20 @@ export default function BorrowerLoanStatus() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [loanRequests, setLoanRequests] = useState([]);
-  const [allLoanRequests, setAllLoanRequests] = useState([]); // Store ALL loans unfiltered
+  const [allLoanRequests, setAllLoanRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // TODO: Replace with actual logged-in user's email from your auth system
-  // For testing, check what email you used when submitting loan requests
-  const userEmail = localStorage.getItem('userEmail'); // Get this from your auth context/session
+  const userEmail = localStorage.getItem('userEmail');
   
-  // Debug: Log what we're searching for
   useEffect(() => {
     console.log('🔍 Searching for loan requests with email:', userEmail);
   }, []);
   
   useEffect(() => {
     fetchMyLoanRequests();
-  }, []); // Only fetch once on mount
+  }, []);
   
-  // Filter locally when filterStatus changes
   useEffect(() => {
     if (allLoanRequests.length > 0) {
       if (filterStatus === 'all') {
@@ -45,10 +41,9 @@ export default function BorrowerLoanStatus() {
       let query = supabase
         .from('loan_requests')
         .select('*')
-        .eq('borrower_email', userEmail) // Only get loans for this borrower
+        .eq('borrower_email', userEmail)
         .order('created_at', { ascending: false });
 
-      // Don't filter by status here - get ALL loans
       const { data, error } = await query;
 
       if (error) {
@@ -62,7 +57,7 @@ export default function BorrowerLoanStatus() {
       console.log('📋 Raw data:', data);
 
       const mapped = (data || []).map((req) => ({
-        id: req.request_id,
+        id: req.id,
         borrowerName: req.borrower_name,
         email: req.borrower_email,
         loanType: req.loan_type,
@@ -75,12 +70,11 @@ export default function BorrowerLoanStatus() {
         requestDate: req.request_date,
         status: req.status,
         createdAt: req.created_at,
+        transactionHash: req.transaction_hash,
       }));
 
-      // Store ALL loans
       setAllLoanRequests(mapped);
       
-      // Set filtered loans based on current filter
       if (filterStatus === 'all') {
         setLoanRequests(mapped);
       } else {
@@ -142,7 +136,7 @@ export default function BorrowerLoanStatus() {
       case 'approved':
         return {
           title: 'Congratulations! Your Loan is Approved',
-          message: 'Your loan application has been approved!',
+          message: 'Your loan application has been approved! The funds have been sent to your wallet via blockchain.',
           color: 'bg-green-50 border-green-200 text-green-800'
         };
       case 'denied':
@@ -157,8 +151,9 @@ export default function BorrowerLoanStatus() {
   };
   
   const navItems = [
-    { icon: TrendingUp, label: 'Credit Score', href: '/borrower/credit-score' },
-    { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: CreditCard, label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
@@ -228,12 +223,21 @@ export default function BorrowerLoanStatus() {
             <div className="flex items-center mb-4 justify-between"> 
                 
           <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
+          <div className="flex space-x-4">
+            <a
+            href="/borrower/loans/loan-request"
+            className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+          >
+            Apply for a Loan
+          </a>
           <a
-                    href="/borrower/loans/loan-request"
-                    className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
-                  >
-                    Apply for a Loan
-                  </a>
+            href="/borrower/loans/loan-payment"
+            className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+          >
+            Pay Loans
+          </a>
+          </div>
+          
           </div>
           
           <p className="text-slate-600">Track the status of your loan requests</p>
@@ -394,6 +398,69 @@ export default function BorrowerLoanStatus() {
                     <div className={`rounded-lg p-4 mb-4 border ${getStatusMessage(selectedRequest.status).color}`}>
                       <h4 className="font-semibold mb-1">{getStatusMessage(selectedRequest.status).title}</h4>
                       <p className="text-sm">{getStatusMessage(selectedRequest.status).message}</p>
+                    </div>
+                  )}
+                  
+                  {/* Blockchain Transaction Info - Show for approved loans */}
+                  {selectedRequest.status === 'approved' && selectedRequest.transactionHash && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <h4 className="font-semibold text-blue-800 mb-3 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Blockchain Transaction Confirmed
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <p className="text-blue-700 font-medium">Transaction Hash:</p>
+                          <a
+                            href={`https://etherscan.io/tx/${selectedRequest.transactionHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 underline font-mono text-xs break-all"
+                          >
+                            {selectedRequest.transactionHash}
+                          </a>
+                        </div>
+                        
+                        {selectedRequest.blockNumber && (
+                          <div className="flex justify-between">
+                            <span className="text-blue-700 font-medium">Block Number:</span>
+                            <span className="text-blue-800 font-mono">{selectedRequest.blockNumber}</span>
+                          </div>
+                        )}
+                        
+                        {selectedRequest.ethAmount && (
+                          <div className="flex justify-between">
+                            <span className="text-blue-700 font-medium">Amount Funded:</span>
+                            <span className="text-blue-800 font-semibold">{selectedRequest.ethAmount} ETH</span>
+                          </div>
+                        )}
+                        
+                        {selectedRequest.lenderAddress && (
+                          <div>
+                            <p className="text-blue-700 font-medium">Lender Address:</p>
+                            <p className="text-blue-800 font-mono text-xs break-all">{selectedRequest.lenderAddress}</p>
+                          </div>
+                        )}
+                        
+                        {selectedRequest.borrowerAddress && (
+                          <div>
+                            <p className="text-blue-700 font-medium">Your Wallet:</p>
+                            <p className="text-blue-800 font-mono text-xs break-all">{selectedRequest.borrowerAddress}</p>
+                          </div>
+                        )}
+                        
+                        <div className="pt-2 border-t border-blue-200">
+                          <a
+                            href={`https://etherscan.io/tx/${selectedRequest.transactionHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View on Etherscan
+                          </a>
+                        </div>
+                      </div>
                     </div>
                   )}
                   

@@ -1,20 +1,54 @@
 'use client'
 
+import { ethers } from 'ethers';
 import React, { useState, useEffect } from 'react';
-import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle } from 'lucide-react';
+import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Wallet, TrendingUp } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
-export default function LenderDashboard() {
+export default function BorrowerDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [filterStatus, setFilterStatus] = useState('pending');
   const [loanRequests, setLoanRequests] = useState([]);
+  const [totalLoans, setTotalLoans] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hasWallet, setHasWallet] = useState(false);
+  const [lenderEmail, setLenderEmail] = useState('');
   
   useEffect(() => {
+    const email = localStorage.getItem('userEmail');
+    if (!email) {
+      window.location.href = "/";
+      return;
+    }
+    setLenderEmail(email);
+    
+    // Check if lender has wallet connected
+    checkLenderWallet(email);
+    fetchTotalLoanRequests();
     fetchLoanRequests();
   }, [filterStatus]);
+  
+  const checkLenderWallet = async (email) => {
+    try {
+      const { data, error } = await supabase
+        .from('Account')
+        .select('wallet_address')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (data && data.wallet_address) {
+        setHasWallet(true);
+        console.log('✅ Lender wallet connected:', data.wallet_address);
+      } else {
+        setHasWallet(false);
+        console.log('❌ Lender has no wallet connected');
+      }
+    } catch (err) {
+      console.error('Error checking wallet:', err);
+    }
+  };
   
   const fetchLoanRequests = async () => {
     try {
@@ -26,7 +60,17 @@ export default function LenderDashboard() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (filterStatus !== 'all') {
+      // filter by the email specific to the current session user.
+      if (filterStatus === 'approved') {
+        query = query
+          .eq('lender_email', lenderEmail)
+          .eq('status', 'approved');
+      } else if (filterStatus === 'denied') {
+        query = query
+          .eq('lender_email', lenderEmail)
+          .eq('status', 'denied');
+      } else if (filterStatus !== 'all') {
+        // Normal status-based filters: pending / approved / denied
         query = query.eq('status', filterStatus);
       }
 
@@ -40,9 +84,10 @@ export default function LenderDashboard() {
       }
 
       const mapped = (data || []).map((req) => ({
-        id: req.request_id,
-        borrowerName: req.borrower_name,
+        id: req.id,                 // REAL Supabase PK (UUID)
+        requestId: req.request_id,  // The custom request_id string (user-facing)
         email: req.borrower_email,
+        borrowerName: req.borrower_name,
         loanType: req.loan_type,
         loanAmount: Number(req.loan_amount),
         loanTerm: req.loan_term,
@@ -50,8 +95,9 @@ export default function LenderDashboard() {
         creditScore: req.credit_score,
         creditBand: req.credit_band,
         reasons: Array.isArray(req.reasons) ? req.reasons : [],
-        requestDate: req.request_date,
         status: req.status,
+        requestDate: req.request_date,
+        lender_Email: req.lender_email,
       }));
 
       setLoanRequests(mapped);
@@ -64,34 +110,131 @@ export default function LenderDashboard() {
     }
   };
   
-  const handleApprove = async (requestId) => {
-    try {
-      const { error } = await supabase
-        .from('loan_requests')
-        .update({ status: 'approved' })
-        .eq('request_id', requestId);
+  const fetchTotalLoanRequests = async () => {
+    const { count, error } = await supabase
+      .from('loan_requests')
+      .select('*', { count: 'exact', head: true });
 
-      if (error) {
-        console.error('Error approving loan:', error);
-        alert('Failed to approve loan request: ' + error.message);
-        return;
-      }
-
-      alert(`Loan request ${requestId} has been approved!`);
-      fetchLoanRequests(); // Refresh the list
-      setSelectedRequest(null);
-    } catch (err) {
-      console.error('Error approving loan:', err);
-      alert('Failed to approve loan request');
+    if (!error && typeof count === "number") {
+      setTotalLoans(count);
     }
   };
 
-  const handleDeny = async (requestId) => {
+  const handleApprove = async (id) => {
+    if (!hasWallet) {
+      alert('You must connect your MetaMask wallet before approving loans. Please visit your profile to connect.');
+      return;
+    }
+    
     try {
+      // Get the loan request details using the UUID id
+      const request = loanRequests.find(r => r.id === id);
+      if (!request) {
+        alert('Loan request not found');
+        return;
+      }
+
+      // Get borrower's wallet address from database
+      const { data: borrowerData, error: borrowerError } = await supabase
+        .from('Account')
+        .select('wallet_address')
+        .eq('email', request.email)
+        .single();
+
+      if (borrowerError || !borrowerData?.wallet_address) {
+        alert('Borrower wallet address not found. Please ensure borrower has connected their MetaMask wallet.');
+        return;
+      }
+
+      // 1. SEND BLOCKCHAIN TRANSACTION
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const lenderAddress = await signer.getAddress();
+      
+      // Convert loan amount to ETH (you may need to adjust the conversion rate)
+      // For demo purposes, using a simple conversion: $1 = 0.0001 ETH
+      const ethAmount = (request.loanAmount * 0.0001).toFixed(4);
+      const amountInWei = ethers.parseEther(ethAmount.toString());
+      
+      console.log('Sending transaction...');
+      console.log('From (Lender):', lenderAddress);
+      console.log('To (Borrower):', borrowerData.wallet_address);
+      console.log('Amount:', ethAmount, 'ETH');
+      
+      // Send the ETH transaction
+      const tx = await signer.sendTransaction({
+        to: borrowerData.wallet_address,
+        value: amountInWei
+      });
+      
+      console.log('Transaction sent! Hash:', tx.hash);
+      alert('Transaction sent! Waiting for confirmation...');
+      
+      // Wait for transaction to be mined
+      const receipt = await tx.wait();
+      console.log('Transaction confirmed! Block:', receipt.blockNumber);
+      
+      // 2. UPDATE DATABASE WITH TRANSACTION INFO (using UUID id)
+      const { data: updateData, error } = await supabase
+        .from('loan_requests')
+        .update({ 
+          status: 'approved',
+          lender_email: lenderEmail,
+          transaction_hash: receipt.hash,
+        })
+        .eq('id', id)
+        .select(); // Use the UUID id, not request_id
+
+      if (error) {
+        console.error('Error updating database:', error);
+        console.error('Full error details:', JSON.stringify(error, null, 2));
+        alert('Transaction successful but failed to update database: ' + error.message);
+        return;
+      }
+      
+      console.log('Database updated successfully:', updateData);
+
+      alert(`Loan request ${request.requestId} has been approved and funded! Transaction: ${receipt.hash}`);
+      fetchLoanRequests();
+      setSelectedRequest(null);
+      
+    } catch (err) {
+      console.error('Error approving loan:', err);
+      
+      // Handle specific MetaMask errors
+      if (err.code === 4001) {
+        alert('Transaction rejected by user');
+      } else if (err.code === -32603) {
+        alert('Insufficient funds in wallet');
+      } else {
+        alert('Failed to approve loan request: ' + err.message);
+      }
+    }
+  };
+
+  const handleDeny = async (id) => {
+    if (!hasWallet) {
+      alert('You must connect your MetaMask wallet before denying loans. Please visit your profile to connect.');
+      return;
+    }
+    
+    try {
+      // Get the loan request details for display purposes
+      const request = loanRequests.find(r => r.id === id);
+      
+      // Get lender's wallet address
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const lenderAddress = await signer.getAddress();
+      
+      // Update using UUID id
       const { error } = await supabase
         .from('loan_requests')
-        .update({ status: 'denied' })
-        .eq('request_id', requestId);
+        .update({ 
+          status: 'denied',
+          lender_email: lenderEmail
+        })
+        .eq('id', id); // Use the UUID id, not request_id
 
       if (error) {
         console.error('Error denying loan:', error);
@@ -99,8 +242,8 @@ export default function LenderDashboard() {
         return;
       }
 
-      alert(`Loan request ${requestId} has been denied.`);
-      fetchLoanRequests(); // Refresh the list
+      alert(`Loan request ${request?.requestId || id} has been denied.`);
+      fetchLoanRequests();
       setSelectedRequest(null);
     } catch (err) {
       console.error('Error denying loan:', err);
@@ -132,6 +275,7 @@ export default function LenderDashboard() {
   
   const navItems = [
     { icon: DollarSign, label: 'Loan Requests', href: '/lender/requests' },
+    { icon: TrendingUp, label: 'Payment Status', href: '/lender/payments' }, 
     { icon: User, label: 'Profile', href: '/lender/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
@@ -195,6 +339,28 @@ export default function LenderDashboard() {
           <p className="text-slate-600">Review and manage borrower loan applications</p>
         </div>
         
+        {/* MetaMask Wallet Warning for Lenders */}
+        {!hasWallet && (
+          <div className="mb-6">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start">
+              <Wallet className="w-5 h-5 text-orange-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-orange-800 mb-1">MetaMask Wallet Required</h3>
+                <p className="text-sm text-orange-700 mb-3">
+                  You must connect your MetaMask wallet before you can approve or deny loan requests. This ensures secure blockchain-based transactions.
+                </p>
+                <a
+                  href="/lender/profile"
+                  className="inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-md transition-colors"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  Connect Wallet in Profile
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Filter Tabs */}
         <div className="mb-6 flex flex-wrap gap-2">
           <button
@@ -205,7 +371,7 @@ export default function LenderDashboard() {
                 : 'bg-white text-slate-600 hover:bg-slate-100'
             }`}
           >
-            All Requests ({loanRequests.length})
+            All Requests ({totalLoans})
           </button>
           <button
             onClick={() => setFilterStatus('pending')}
@@ -273,7 +439,7 @@ export default function LenderDashboard() {
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <h3 className="text-lg font-bold text-slate-800">{request.borrowerName}</h3>
-                        <p className="text-sm text-slate-500">{request.id}</p>
+                        <p className="text-sm text-slate-500">{request.requestId}</p>
                       </div>
                       {getStatusBadge(request.status)}
                     </div>
@@ -308,7 +474,7 @@ export default function LenderDashboard() {
               )}
             </div>
             
-            {/* Request Details Panel - Rest of the component stays the same */}
+            {/* Request Details Panel */}
             <div className="lg:sticky lg:top-8 h-fit">
               {!selectedRequest ? (
                 <div className="bg-white rounded-lg shadow-md p-8 text-center">
@@ -331,7 +497,7 @@ export default function LenderDashboard() {
                     <div className="space-y-3">
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-600">Request ID:</span>
-                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.id}</span>
+                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.requestId}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-600">Loan Type:</span>
@@ -384,19 +550,27 @@ export default function LenderDashboard() {
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleApprove(selectedRequest.id)}
-                        className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center"
+                        disabled={!hasWallet}
+                        className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <CheckCircle className="w-5 h-5 mr-2" />
                         Approve
                       </button>
                       <button
                         onClick={() => handleDeny(selectedRequest.id)}
-                        className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center"
+                        disabled={!hasWallet}
+                        className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <XCircle className="w-5 h-5 mr-2" />
                         Deny
                       </button>
                     </div>
+                  )}
+                  
+                  {!hasWallet && selectedRequest.status === 'pending' && (
+                    <p className="text-center text-sm text-orange-600 mt-2">
+                      Connect your wallet to approve or deny loans
+                    </p>
                   )}
                   
                   {selectedRequest.status === 'approved' && (

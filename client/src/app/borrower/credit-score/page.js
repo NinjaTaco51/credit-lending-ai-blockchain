@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react';
-import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut } from 'lucide-react';
+import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, BanknoteArrowDown } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
 export default function Dashboard() {
@@ -295,7 +295,8 @@ export default function Dashboard() {
   
   const navItems = [
     { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
-    { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
   ];

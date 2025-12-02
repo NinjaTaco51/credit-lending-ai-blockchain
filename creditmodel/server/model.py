@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.metrics import accuracy_score
 
+model = None
 # Optional fuzzy fallback
 try:
     from rapidfuzz import process, fuzz
@@ -995,10 +996,62 @@ def transform_df_for_model(df: pd.DataFrame) -> torch.Tensor:
     return torch.tensor(X_all, dtype=torch.float32)
 
 def predict_with_reasons_df(df: pd.DataFrame):
+    # 1. Access the global model variable
+    global model
+    
+    # 2. CHECK: If the model is empty, load it now!
+    if model is None:
+        print("⚠️ Model not found in memory. Loading artifacts now...")
+        load_artifacts()
+    
+    # 3. Proceed with prediction
     x = transform_df_for_model(df)
     with torch.no_grad():
-        logits = model(x)
+        logits = model(x)  # Now this will work because model is loaded
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+
+    # ... (Keep the rest of your existing function code below this unchanged) ...
+    # Raw NN view
+    top_idx = int(np.argmax(probs))
+    nn_decision = CLASS_NAMES[top_idx]
+    confidence = float(probs[top_idx]) * 100.0
+    p_nn_poor = float(probs[CLASS_NAMES.index("Poor")])
+    
+    # ... (ensure you keep the rest of the logic down to the return statement)
+    
+    p_rule_poor = rule_risk_from_df(df)
+    p_poor = float(p_nn_poor + p_rule_poor - (p_nn_poor * p_rule_poor))
+    p_poor = max(0.0, min(1.0, p_poor))
+
+    credit_score = probability_to_score(p_poor, method="linear")
+    band = score_band(credit_score)
+
+    if band in {"Poor"}:
+        decision = "Poor"
+    elif band in {"Fair"}:
+        decision = "Standard"
+    else:
+        decision = "Good" if nn_decision == "Good" and band in {"Very Good","Excellent"} else "Standard"
+
+    icon = "⚠️" if band in {"Poor","Fair"} else ("✅" if band in {"Very Good","Excellent"} else "⚖️")
+    message = f"{icon} Score {credit_score:.0f} ({band}). Confidence {confidence:.1f}%."
+
+    reasons = []
+    need_reasons = (band in {"Poor","Fair"}) or (p_poor >= 0.5)
+    if need_reasons:
+        # (Your existing reason logic here...)
+        reasons = fallback_reasons_dynamic(df, top_k=4)
+
+    return {
+        "decision": decision,
+        "confidence": round(confidence, 1),
+        "probabilities": {k: float(v) for k, v in zip(CLASS_NAMES, probs)},
+        "risk_probability": round(p_poor, 6),
+        "credit_score": round(credit_score, 0),
+        "band": band,
+        "message": message,
+        "reasons": reasons,
+    }
 
     # Raw NN view (still useful to return and to gate Captum)
     top_idx = int(np.argmax(probs))
@@ -1076,3 +1129,69 @@ def predict_with_reasons_df(df: pd.DataFrame):
 def predict_from_user_payload(payload: Dict[str, Any]):
     df = build_df_from_user_payload(payload)
     return predict_with_reasons_df(df)
+
+# ... (All your existing imports and functions stay the same) ...
+
+# ───────────────── DUAL MODE: TRAIN OR PREDICT ─────────────────
+import sys
+
+if __name__ == "__main__":
+    # CHECK: Did the server send us data?
+    if len(sys.argv) > 1:
+        # === PREDICTION MODE ===
+        try:
+            # 1. Load artifacts (Silent mode to not break JSON output)
+            # We redirect stdout temporarily to stop "Loaded model" prints from messing up JSON
+            original_stdout = sys.stdout
+            sys.stdout = open(os.devnull, 'w') 
+            load_artifacts()
+            sys.stdout = original_stdout # Restore print capability
+
+            # 2. Parse Input
+            input_json = sys.argv[1]
+            payload = json.loads(input_json)
+
+            # 3. Predict
+            result = predict_from_user_payload(payload)
+
+            # 4. Output ONLY JSON
+            print(json.dumps(result))
+
+        except Exception as e:
+            # Print error as JSON
+            print(json.dumps({"error": str(e)}))
+            sys.exit(1)
+
+    else:
+        # === TRAINING MODE (Original Logic) ===
+        print("🔧 No input data detected. Starting Training Mode...")
+        
+        # We already built: ohe, scaler, NUM_COLS_FIT, CAT_COLS_FIT, X_train, X_test
+        model = MLP(in_dim=X_train.shape[1], n_classes=len(CLASS_NAMES))
+
+        # Class weights
+        counts = Counter(y_tr)
+        total = sum(counts.values())
+        weights = torch.tensor(
+            [total / counts.get(i, 1) for i in range(len(CLASS_NAMES))],
+            dtype=torch.float32
+        )
+        criterion = nn.CrossEntropyLoss(weight=weights)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+
+        model.train()
+        for _ in range(30):
+            for xb, yb in train_loader:
+                logits = model(xb)
+                loss = criterion(logits, yb)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        model.eval()
+        if yte is not None:
+            with torch.no_grad():
+                preds = torch.argmax(model(Xte), dim=1).cpu().numpy()
+            print("Test accuracy:", accuracy_score(yte, preds))
+
+        save_artifacts(model, ohe, scaler, NUM_COLS_FIT, CAT_COLS_FIT)
