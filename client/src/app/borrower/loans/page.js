@@ -13,15 +13,7 @@ export default function BorrowerLoanStatus() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // TODO: Replace with actual logged-in user's email from your auth system
-  // For testing, check what email you used when submitting loan requests
-  const userEmail = localStorage.getItem('userEmail'); // Get this from your auth context/session
-  
-  // Debug: Log what we're searching for
-  useEffect(() => {
-    console.log('🔍 Searching for loan requests with email:', userEmail);
-  }, []);
-  
+  // Fetch on mount
   useEffect(() => {
     fetchMyLoanRequests();
   }, []); // Only fetch once on mount
@@ -34,6 +26,8 @@ export default function BorrowerLoanStatus() {
       } else {
         setLoanRequests(allLoanRequests.filter(req => req.status === filterStatus));
       }
+    } else {
+      setLoanRequests([]);
     }
   }, [filterStatus, allLoanRequests]);
   
@@ -41,6 +35,34 @@ export default function BorrowerLoanStatus() {
     try {
       setIsLoading(true);
       setError(null);
+
+      // Get current user from Supabase Auth
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error("Error getting user:", userError);
+        setError("You must be logged in to view your loan requests.");
+        setIsLoading(false);
+        if (typeof window !== 'undefined') {
+          window.location.href = "/";
+        }
+        return;
+      }
+
+      if (!user) {
+        setError("You must be logged in to view your loan requests.");
+        setIsLoading(false);
+        if (typeof window !== 'undefined') {
+          window.location.href = "/";
+        }
+        return;
+      }
+
+      const userEmail = user.email;
+      console.log('🔍 Searching for loan requests with email:', userEmail);
 
       let query = supabase
         .from('loan_requests')
@@ -225,17 +247,15 @@ export default function BorrowerLoanStatus() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-            <div className="flex items-center mb-4 justify-between"> 
-                
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
-          <a
-                    href="/borrower/loans/loan-request"
-                    className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
-                  >
-                    Apply for a Loan
-                  </a>
+          <div className="flex items-center mb-4 justify-between"> 
+            <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
+            <a
+              href="/borrower/loans/loan-request"
+              className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+            >
+              Apply for a Loan
+            </a>
           </div>
-          
           <p className="text-slate-600">Track the status of your loan requests</p>
         </div>
         

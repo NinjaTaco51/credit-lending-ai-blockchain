@@ -71,11 +71,22 @@ export default function EditProfilePage() {
   // Load user's saved wallet address from backend
   const loadUserWalletFromBackend = async () => {
     try {
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
-        console.warn('No userEmail in localStorage');
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error('Error getting user for wallet load:', userError);
         return;
       }
+
+      if (!user) {
+        console.warn('No authenticated user when loading wallet');
+        return;
+      }
+
+      const email = user.email;
 
       const { data, error } = await supabase
         .from('Account')
@@ -176,10 +187,16 @@ export default function EditProfilePage() {
   const saveWalletToBackend = async (address) => {
     setIsSavingWallet(true);
     try {
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
-        throw new Error('No user email in localStorage');
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('No authenticated user while saving wallet');
       }
+
+      const email = user.email;
 
       const { error } = await supabase
         .from('Account')
@@ -207,10 +224,16 @@ export default function EditProfilePage() {
     try {
       console.log('Disconnecting wallet...');
 
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
-        throw new Error('No user email in localStorage');
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('No authenticated user while disconnecting wallet');
       }
+
+      const email = user.email;
 
       const { error } = await supabase
         .from('Account')
@@ -272,30 +295,53 @@ export default function EditProfilePage() {
 
   useEffect(() => {
     const fetchAndPrefill = async () => {
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
-        window.location.href = "/";
+      // Get logged-in user from Supabase Auth
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error('Error getting user:', userError);
+        window.location.href = '/';
         return;
       }
 
+      if (!user) {
+        // Not logged in → go back to landing/login
+        window.location.href = '/';
+        return;
+      }
 
-      let { data, error } = await supabase
-        .from("Account")
+      const email = user.email;
+
+      // Load profile from your Account table by email
+      const { data, error } = await supabase
+        .from('Account')
         .select('name, email, phone, dob')
         .eq('email', email)
         .maybeSingle();
 
+      if (error) {
+        console.error('Prefill error:', error);
+        return;
+      }
+
+      if (!data) {
+        console.log('No Account row for this user yet');
+        return;
+      }
+
       setProfileData({
-        fullName: data.name,
-        email: data.email,
-        phone: data.phone,
-        dob: data.dob
+        fullName: data.name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        dob: data.dob || '',
       });
-      console.log(profileData)
     };
+
     fetchAndPrefill();
   }, []);
-
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -314,27 +360,38 @@ export default function EditProfilePage() {
   };
 
   const handleSave = async () => {
-    const email = localStorage.getItem('userEmail');
-    if (!email) {
-      window.location.href = "/";
+    // Get logged-in user from Supabase Auth
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      console.error('Error getting user in handleSave:', userError);
+      window.location.href = '/';
       return;
     }
 
-    //Validate all profile fields are inputted
+    if (!user) {
+      window.location.href = '/';
+      return;
+    }
+
+    const email = user.email;
+
+    // Validate all profile fields
     if (!profileData.fullName || !profileData.email || !profileData.phone || !profileData.dob) {
-      alert("Please Fill in All Fields in Personal Information")
+      alert('Please Fill in All Fields in Personal Information');
       return;
     }
 
-    //check valid email format
     if (!isValidEmail(profileData.email)) {
-      alert("Input Valid Email")
+      alert('Input Valid Email');
       return;
     }
 
-    //check valid phone format
     if (!isValidPhone(profileData.phone)) {
-      alert("Input Valid Phone")
+      alert('Input Valid Phone');
       return;
     }
 
@@ -353,7 +410,7 @@ export default function EditProfilePage() {
         return;
       }
       if (!isValidPassword(passwordData.newPassword)) {
-        alert("Input Valid Password that meets requirements")
+        alert('Input Valid Password that meets requirements');
         return;
       }
 
@@ -363,31 +420,35 @@ export default function EditProfilePage() {
         .eq('email', email)
         .maybeSingle();
 
-      const currentpasswordHash = pwCheck.password_hash
+      if (pwCheckError || !pwCheck) {
+        alert('Could not verify current password');
+        return;
+      }
+
+      const currentpasswordHash = pwCheck.password_hash;
       const passwordCorrect = await bcrypt.compare(passwordData.currentPassword, currentpasswordHash);
 
       if (passwordCorrect) {
         const newPasswordHash = await bcrypt.hash(passwordData.newPassword, 12);
-        const { data: pwUpdate, error: pwUpdateError } = await supabase
+        await supabase
           .from('Account')
-          .update({ 'password_hash': newPasswordHash })
-          .eq('email', email)
+          .update({ password_hash: newPasswordHash })
+          .eq('email', email);
       } else {
-        alert("Incorrect Current Password")
+        alert('Incorrect Current Password');
         return;
       }
-
     }
 
     setIsLoading(true);
 
-    const { data: update, error: updateError } = await supabase
+    const { error: updateError } = await supabase
       .from('Account')
       .update({
-        "name": profileData.fullName,
-        "email": profileData.email,
-        "phone": profileData.phone,
-        "dob": profileData.dob
+        name: profileData.fullName,
+        email: profileData.email,
+        phone: profileData.phone,
+        dob: profileData.dob,
       })
       .eq('email', email)
       .maybeSingle();
@@ -398,13 +459,16 @@ export default function EditProfilePage() {
     setPasswordData({
       currentPassword: '',
       newPassword: '',
-      confirmPassword: ''
+      confirmPassword: '',
     });
 
-    alert("Profile Updated")
-
-
-  }
+    if (updateError) {
+      console.error('Profile update error:', updateError);
+      alert('Failed to update profile');
+    } else {
+      alert('Profile Updated');
+    }
+  };
 
   const navItems = [
     { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},

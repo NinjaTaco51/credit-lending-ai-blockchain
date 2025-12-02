@@ -24,18 +24,39 @@ export default function SetPasswordPage() {
     hasNumber: false
   });
 
+  // Get lender from Supabase Auth instead of localStorage
   useEffect(() => {
-    // Get user email from localStorage
-    const email = localStorage.getItem('userEmail');
-    if (email) {
-      setUserEmail(email);
-    } else {
-      window.location.href="/";
-    }
+    const init = async () => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (error || !user) {
+        if (typeof window !== 'undefined') {
+          window.location.href = "/";
+        }
+        return;
+      }
+
+      setUserEmail(user.email || "");
+
+      // Optionally prefill name from Account table
+      const { data: accountRow, error: accountError } = await supabase
+        .from("Account")
+        .select("name")
+        .eq("email", user.email)
+        .maybeSingle();
+
+      if (!accountError && accountRow?.name) {
+        setProfileData(prev => ({ ...prev, fullName: accountRow.name }));
+      }
+    };
+
+    init();
   }, []);
 
   useEffect(() => {
-    // Update password requirements as user types
     const password = profileData.newPassword;
     setPasswordRequirements({
       minLength: password.length >= 8,
@@ -54,18 +75,11 @@ export default function SetPasswordPage() {
   };
 
   function isValidPassword(password) {
-    if (password.length < 8) {
-      return false;
-    }
-    
+    if (password.length < 8) return false;
     const hasUppercase = /[A-Z]/.test(password);
     const hasLowercase = /[a-z]/.test(password);
     const hasNumber = /[0-9]/.test(password);
-    
-    if (hasUppercase && hasLowercase && hasNumber) {
-      return true;
-    }
-    return false;
+    return hasUppercase && hasLowercase && hasNumber;
   }
 
   const handleSubmit = async () => {
@@ -84,16 +98,29 @@ export default function SetPasswordPage() {
       return;
     }
 
+    if (!userEmail) {
+      alert("No logged-in user found");
+      return;
+    }
+
     setIsLoading(true);
 
     const passwordHash = await bcrypt.hash(profileData.newPassword, 12);
-    await supabase.from("Account").update({ name: profileData.fullName, password_hash: passwordHash }).eq("email", userEmail);
+    const { error } = await supabase
+      .from("Account")
+      .update({ name: profileData.fullName, password_hash: passwordHash })
+      .eq("email", userEmail);
 
-    setTimeout(() => {
+    if (error) {
+      console.error("Error updating account:", error);
+      alert("Failed to update account.");
       setIsLoading(false);
-      alert('Account set up successfully!');
-      window.location.href = "/lender/requests";
-    }, 1500);
+      return;
+    }
+
+    setIsLoading(false);
+    alert('Account set up successfully!');
+    window.location.href = "/lender/requests";
   };
 
   return (

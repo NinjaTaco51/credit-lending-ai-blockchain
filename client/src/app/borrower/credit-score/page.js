@@ -36,11 +36,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchAndPrefill = async () => {
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        // Not logged in → redirect
         window.location.href = "/";
         return;
       }
+      const email = user.email;
 
       const { data, error } = await supabase
         .from('Account')
@@ -179,39 +182,59 @@ export default function Dashboard() {
   };
   
   const handleSubmit = async (e) => {
-    
     e.preventDefault();
     setIsLoading(true);
 
-    const email = localStorage.getItem('userEmail');
-      if (!email) {
-        window.location.href = "/";
-        return;
-      }
+    // Get logged-in user from Supabase Auth instead of localStorage
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
+    if (userError) {
+      console.error("Error getting user:", userError);
+      setIsLoading(false);
+      window.location.href = "/";
+      return;
+    }
+
+    if (!user) {
+      // Not logged in → send to landing/login
+      setIsLoading(false);
+      window.location.href = "/";
+      return;
+    }
+
+    const email = user.email;
+
+    // Get DOB from Account table
     let { data: dobRow, error: dobError } = await supabase
-      .from('Account')
-      .select('dob')
-      .eq('email', email)
+      .from("Account")
+      .select("dob")
+      .eq("email", email)
       .maybeSingle();
+
+    if (dobError || !dobRow?.dob) {
+      console.error("DOB fetch error:", dobError);
+      alert("Could not load your date of birth.");
+      setIsLoading(false);
+      return;
+    }
 
     const birthDate = new Date(dobRow.dob);
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
-
-    // Adjust if the birthday hasn't occurred yet this year
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
       age--;
     }
 
     const monthNames = [
       "January","February","March","April","May","June",
-      "July","August","September","October","November","December"
+      "July","August","September","October","November","December",
     ];
     const application_month = monthNames[today.getMonth()];
 
-    // Map keys to display names
     const loanLabels = {
       mortgage: "Mortgage Loan",
       auto: "Auto Loan",
@@ -221,7 +244,7 @@ export default function Dashboard() {
       creditBuilder: "Credit-Builder Loan",
       payDay: "Payday Loan",
       homeEquity: "Home Equity Loan",
-      other: "Other Loan"
+      other: "Other Loan",
     };
 
     const loans = Object.entries(formData.loanTypes)
@@ -229,33 +252,41 @@ export default function Dashboard() {
       .map(([key]) => loanLabels[key]);
 
     const dataInJson = {
-      "income_monthly": Number(formData.monthlyIncome),
-      "housing_cost_monthly": Number(formData.housingCost),
-      "other_expenses_monthly": Number(formData.otherExpenses),
-      "employment_role": String(formData.occupation),
-      "education_level": String(formData.educationLevel),
-      "loans": loans,
+      income_monthly: Number(formData.monthlyIncome),
+      housing_cost_monthly: Number(formData.housingCost),
+      other_expenses_monthly: Number(formData.otherExpenses),
+      employment_role: String(formData.occupation),
+      education_level: String(formData.educationLevel),
+      loans,
       age,
       application_month,
-      "num_credit_cards": Number(formData.numCreditCards),
-      "num_bank_accounts": Number(formData.numAccounts),
-      "num_loans": Number(formData.numLoans),
-      "invested": Number(formData.invested),
+      num_credit_cards: Number(formData.numCreditCards),
+      num_bank_accounts: Number(formData.numAccounts),
+      num_loans: Number(formData.numLoans),
+      invested: Number(formData.invested),
     };
 
     console.log("Sending payload:", dataInJson);
 
-    const { data: creditDataRow, error: creditDataError } = await supabase
-      .from('Account')
-      .update({"credit_data": dataInJson})
-      .eq('email', email)
-      .maybeSingle();
+    // Save credit_data in Supabase
+    const { error: creditDataError } = await supabase
+      .from("Account")
+      .update({ credit_data: dataInJson })
+      .eq("email", email);
 
+    if (creditDataError) {
+      console.error("Error updating credit_data:", creditDataError);
+      alert("Failed to save your financial info.");
+      setIsLoading(false);
+      return;
+    }
+
+    // Call scoring model API
     try {
       const response = await fetch("http://localhost:8080/score", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(dataInJson),
       });
@@ -270,19 +301,24 @@ export default function Dashboard() {
 
       const result = await response.json();
 
-      const { data: creditScoreRow, error: creditScoreError } = await supabase
-      .from('Account')
-      .update({"credit_score": result.credit_score, "credit_reasons": result.reasons})
-      .eq('email', email)
-      .maybeSingle();
-      
+      // Save score + reasons
+      const { error: creditScoreError } = await supabase
+        .from("Account")
+        .update({
+          credit_score: result.credit_score,
+          credit_reasons: result.reasons,
+        })
+        .eq("email", email);
+
+      if (creditScoreError) {
+        console.error("Error updating credit_score:", creditScoreError);
+      }
+
       setCreditScore(Number(result.credit_score));
       setReasons(result.reasons || []);
       setShowScore(true);
       setIsLoading(false);
-
     } catch (error) {
-      // Network-level failures (server down, CORS, DNS, etc.) appear here
       console.error("Request failed:", error);
       alert("An unexpected error occurred while sending data to the server.");
       setIsLoading(false);

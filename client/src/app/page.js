@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Eye, EyeOff, Mail, Lock, User, Phone, Calendar, Building2, UserCircle } from 'lucide-react';
 import supabase from "../config/supabaseClient"
-import bcrypt from 'bcryptjs';
 
 export default function AuthPages() {
   const [userType, setUserType] = useState('borrower'); // 'borrower' or 'lender'
@@ -78,130 +77,136 @@ export default function AuthPages() {
   };
   
   const handleLoginSubmit = async () => {
+    if (!loginData.email || !loginData.password) {
+      alert("Please enter email and password");
+      return;
+    }
 
     setIsLoading(true);
-    
-    const { data, error } = await supabase
-      .from("Account")
-      .select("password_hash, type")
-      .eq("email", loginData.email)
-      .maybeSingle();
 
+    // 1) Sign in via Supabase Auth
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: loginData.email,
+      password: loginData.password,
+    });
 
     if (error) {
-      console.error(error);
-      alert("Something went wrong. Please try again.");
+      console.error("Login error:", error);
+      alert(error.message || "Login failed. Please check your credentials.");
       setIsLoading(false);
       return;
     }
 
-    // no user found
-    if (data == null) {
-      alert("Email address not found");
-      setIsLoading(false);
-      return;
-    }
+    const user = data.user;
+    // You can store user type in user_metadata at signup
+    const metadataType = user?.user_metadata?.user_type;
 
-    const passwordCorrect = await bcrypt.compare(loginData.password, data.password_hash);
+    // 2) Optionally read type from Account table (if you still rely on it)
+    let finalType = metadataType;
+    if (!finalType) {
+      const { data: profile, error: profileError } = await supabase
+        .from("Account")
+        .select("type")
+        .eq("email", loginData.email)
+        .maybeSingle();
 
-    if (userType === "borrower") {
-      if (passwordCorrect) {
-        if (userType === data.type) {
-          localStorage.setItem('userEmail', loginData.email);
-          window.location.href = "/borrower/credit-score";
-        } else {
-          alert("Please select correct portal type")
-          setIsLoading(false);
-          return;
-        }
+      if (profileError) {
+        console.error("Profile type fetch error:", profileError);
       } else {
-        alert("Incorrect Password")
-        setIsLoading(false);
-        return;
-      } 
-    }
-
-    if (userType === "lender") {
-      if (userType === data.type) {
-        // if it's Password123, it needs to go to setup account
-        if (data.password_hash === loginData.password) {
-          localStorage.setItem('userEmail', loginData.email);
-          window.location.href = "/lender/setup"
-        } else if (passwordCorrect) {
-          localStorage.setItem('userEmail', loginData.email);
-          window.location.href = "/lender/requests";
-        } else {
-          alert("Incorrect password");
-          setIsLoading(false);
-          return;
-        }
-      } else {
-        alert("Please select correct portal type")
-        setIsLoading(false);
-        return;
+        finalType = profile?.type;
       }
     }
 
+    // Check that the chosen portal matches stored type
+    if (finalType && finalType !== userType) {
+      alert("Please select the correct portal type");
+      setIsLoading(false);
+      return;
+    }
+
+    // 3) Redirect based on userType
+    if (userType === "borrower") {
+      window.location.href = "/borrower/credit-score";
+    } else if (userType === "lender") {
+      window.location.href = "/lender/requests";
+    }
+
+    setIsLoading(false);
   };
 
-  
   const handleSignupSubmit = async () => {
-    if (signupData.email == null || signupData.fullName == null || signupData.phone == null || signupData.dob == null || signupData.password == null) {
-      alert("Fill in all fields")
+    if (
+      !signupData.email ||
+      !signupData.fullName ||
+      !signupData.phone ||
+      !signupData.dob ||
+      !signupData.password
+    ) {
+      alert("Fill in all fields");
       return;
     }
 
-    //check valid email format
     if (!isValidEmail(signupData.email)) {
-      alert("Input Valid Email")
+      alert("Input Valid Email");
       return;
     }
 
-    //check valid phone format
     if (!isValidPhone(signupData.phone)) {
-      alert("Input Valid Phone")
+      alert("Input Valid Phone");
       return;
     }
-    
-    //check valid password format
+
     if (!isValidPassword(signupData.password)) {
-      alert("Input Valid Password that meets requirements")
+      alert("Input Valid Password that meets requirements");
       return;
     }
-    
+
     if (signupData.password !== signupData.confirmPassword) {
-      alert('Passwords do not match!');
+      alert("Passwords do not match!");
       return;
     }
-    
+
     setIsLoading(true);
 
-    const passwordHash = await bcrypt.hash(signupData.password, 12)
+    // 1) Create auth user in Supabase
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: signupData.email,
+      password: signupData.password,
+    });
 
-    const { data, error } = await supabase
+    if (authError) {
+      console.error("Auth signup error:", authError);
+      alert(authError.message || "Failed to sign up.");
+      setIsLoading(false);
+      return;
+    }
+
+    const email = authData.user?.email;
+
+    // 2) Create profile row in Account table
+    const { error: accountError } = await supabase
       .from("Account")
       .insert([
         {
-          email: signupData.email,
+          email,
           name: signupData.fullName,
           phone: signupData.phone,
           dob: signupData.dob,
-          password_hash: passwordHash,
-          type: userType
-        }
-      ])
+          type: userType, // 'borrower' or 'lender'
+          // no password_hash needed anymore
+        },
+      ]);
 
-      if (data) {
-        console.log(data)
-      }
-  
-      if (error) {
-        console.log(error)
-      }
+    if (accountError) {
+      console.error("Account insert error:", accountError);
+      alert("Account created in auth, but failed to save profile.");
+      setIsLoading(false);
+      return;
+    }
 
-    setIsLoading(false);      
-    setAuthMode('login');
-
+    setIsLoading(false);
+    setAuthMode("login");
+    alert("Account created! Please log in.");
   };
   
   const switchUserType = (type) => {

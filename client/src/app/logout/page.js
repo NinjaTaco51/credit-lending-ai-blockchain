@@ -1,15 +1,30 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { CreditCard, CheckCircle, LogIn } from 'lucide-react';
+import supabase from '../../config/supabaseClient'; // 👈 adjust path if needed
 
 export default function LoggedOutPage() {
-  
+
   useEffect(() => {
-    localStorage.removeItem('userEmail');
+    const doLogout = async () => {
+      try {
+        // Sign out from Supabase Auth (kills the session)
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('Error signing out:', error);
+        }
+
+        // Clear any legacy localStorage keys
+        // localStorage.removeItem('userEmail');
+      } catch (err) {
+        console.error('Unexpected logout error:', err);
+      }
+    };
+
+    doLogout();
   }, []);
-  
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Navigation Bar */}

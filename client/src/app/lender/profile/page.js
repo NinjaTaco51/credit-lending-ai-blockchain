@@ -47,28 +47,39 @@ export default function EditProfilePage() {
   
   useEffect(() => {
     const fetchAndPrefill = async () => {
-        const email = localStorage.getItem('userEmail');
-          if (!email) {
-            window.location.href = "/";
-            return;
-          }
-      
-      
-      let { data, error} = await supabase
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        if (typeof window !== 'undefined') {
+          window.location.href = "/";
+        }
+        return;
+      }
+
+      const email = user.email;
+
+      const { data, error } = await supabase
         .from("Account")
-        .select('name, email')
-        .eq('email', email)
+        .select("name, email")
+        .eq("email", email)
         .maybeSingle();
 
+      if (error || !data) {
+        console.error("Prefill error:", error);
+        return;
+      }
+
       setProfileData({
-        name: data.name,
-        email: data.email,
+        name: data.name || "",
+        email: data.email || "",
       });
-      console.log(profileData)
     };
+
     fetchAndPrefill();
   }, []);
-  
   
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -87,32 +98,49 @@ export default function EditProfilePage() {
   };
   
   const handleSave = async () => {
-    const email = localStorage.getItem('userEmail');
-    if (!email) {
-      window.location.href = "/";
+    // Get the current user from Supabase Auth
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      console.error('Error getting user:', userError);
+      window.location.href = '/';
       return;
     }
 
-    //Validate all profile fields are inputted
-    if(!profileData.name || !profileData.email ) {
-      alert("Please Fill in All Fields in Personal Information")
+    if (!user) {
+      window.location.href = '/';
       return;
     }
 
-    //check valid email format
+    const email = user.email;
+
+    // Validate profile fields
+    if (!profileData.name || !profileData.email) {
+      alert("Please Fill in All Fields in Personal Information");
+      return;
+    }
+
+    if (!profileData.fullName || !profileData.email || !profileData.phone || !profileData.dob) {
+      alert('Please Fill in All Fields in Personal Information');
+      return;
+    }
+
     if (!isValidEmail(profileData.email)) {
-      alert("Input Valid Email")
+      alert('Input Valid Email');
       return;
     }
 
-    // Validate password fields if any are filled
+    // Validate password change if any field filled
     if (passwordData.currentPassword || passwordData.newPassword || passwordData.confirmPassword) {
       if (!passwordData.currentPassword) {
         alert('Please enter your current password');
         return;
       }
       if (!passwordData.newPassword) {
-        alert('Please enter a new password or Delete Current Password to Edit Basic Profile Info');
+        alert('Please enter a new password or delete current password to edit basic profile info');
         return;
       }
       if (passwordData.newPassword !== passwordData.confirmPassword) {
@@ -120,56 +148,63 @@ export default function EditProfilePage() {
         return;
       }
       if (!isValidPassword(passwordData.newPassword)) {
-        alert("Input Valid Password that meets requirements")
+        alert("Input valid password that meets requirements");
         return;
       }
 
-      const {data: pwCheck, error: pwCheckError} = await supabase
+      const { data: pwCheck, error: pwCheckError } = await supabase
         .from('Account')
         .select('password_hash')
         .eq('email', email)
         .maybeSingle();
 
-      const currentpasswordHash = pwCheck.password_hash
-      const passwordCorrect = await bcrypt.compare(passwordData.currentPassword, currentpasswordHash);
-      
-      if (passwordCorrect) {
-        const newPasswordHash = await bcrypt.hash(passwordData.newPassword, 12);
-        const {data: pwUpdate, error: pwUpdateError} = await supabase
-          .from('Account')
-          .update({'password_hash': newPasswordHash})
-          .eq('email', email)
-      } else {
-        alert("Incorrect Current Password")
+      if (pwCheckError || !pwCheck) {
+        alert("Could not verify current password");
         return;
       }
 
+      const currentPasswordHash = pwCheck.password_hash;
+      const passwordCorrect = await bcrypt.compare(
+        passwordData.currentPassword,
+        currentPasswordHash
+      );
+
+      if (!passwordCorrect) {
+        alert("Incorrect Current Password");
+        return;
+      }
+
+      const newPasswordHash = await bcrypt.hash(passwordData.newPassword, 12);
+      await supabase
+        .from('Account')
+        .update({ password_hash: newPasswordHash })
+        .eq('email', email);
     }
     
     setIsLoading(true);
 
-    const {data: update, error: updateError} = await supabase
+    const { data: update, error: updateError } = await supabase
       .from('Account')
       .update({
-        "name": profileData.name,
-        "email": profileData.email,
+        name: profileData.fullName,
+        email: profileData.email,
+        phone: profileData.phone,
+        dob: profileData.dob,
       })
       .eq('email', email)
       .maybeSingle();
 
     setIsLoading(false);
-    
-    // Clear password fields
+
+    // Clear password fields and show success
     setPasswordData({
       currentPassword: '',
       newPassword: '',
-      confirmPassword: ''
+      confirmPassword: '',
     });
 
-    setIsLoading(false);
-    alert("Profile Updated Successfully")
-
-  }
+    alert('Profile Updated');
+  };
   
  const navItems = [
     { icon: DollarSign, label: 'Loan Requests', href: '/lender/requests' },

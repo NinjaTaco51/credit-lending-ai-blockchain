@@ -13,9 +13,43 @@ export default function LenderDashboard() {
   const [error, setError] = useState(null);
   
   useEffect(() => {
-    fetchLoanRequests();
+    const init = async () => {
+      // Ensure logged-in lender
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setError("You must be logged in as a lender.");
+        if (typeof window !== 'undefined') {
+          window.location.href = "/";
+        }
+        return;
+      }
+
+      // Verify in Account table that this user is a lender
+      const { data: accountRow, error: accountError } = await supabase
+        .from("Account")
+        .select("type")
+        .eq("email", user.email)
+        .maybeSingle();
+
+      if (accountError || accountRow?.type !== "lender") {
+        setError("You are not authorized to view this page.");
+        if (typeof window !== 'undefined') {
+          window.location.href = "/";
+        }
+        return;
+      }
+
+      // If all good, load requests
+      fetchLoanRequests();
+    };
+
+    init();
   }, [filterStatus]);
-  
+
   const fetchLoanRequests = async () => {
     try {
       setIsLoading(true);
@@ -78,7 +112,7 @@ export default function LenderDashboard() {
       }
 
       alert(`Loan request ${requestId} has been approved!`);
-      fetchLoanRequests(); // Refresh the list
+      fetchLoanRequests(); 
       setSelectedRequest(null);
     } catch (err) {
       console.error('Error approving loan:', err);
@@ -100,7 +134,7 @@ export default function LenderDashboard() {
       }
 
       alert(`Loan request ${requestId} has been denied.`);
-      fetchLoanRequests(); // Refresh the list
+      fetchLoanRequests();
       setSelectedRequest(null);
     } catch (err) {
       console.error('Error denying loan:', err);
@@ -108,7 +142,6 @@ export default function LenderDashboard() {
     }
   };
 
-  
   const getScoreColor = (score) => {
     if (score >= 800) return 'text-green-600 bg-green-50';
     if (score >= 740) return 'text-blue-600 bg-blue-50';
