@@ -77,60 +77,118 @@ export default function AuthPages() {
   };
   
   const handleLoginSubmit = async () => {
-    if (!loginData.email || !loginData.password) {
-      alert("Please enter email and password");
-      return;
-    }
-
     setIsLoading(true);
 
-    // 1) Sign in via Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginData.email,
-      password: loginData.password,
-    });
+    const email = loginData.email;
+    const password = loginData.password;
 
-    if (error) {
-      console.error("Login error:", error);
-      alert(error.message || "Login failed. Please check your credentials.");
+    // 1) Try Supabase Auth first
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+    if (!authError && authData?.session) {
+      // Supabase login succeeded – user already migrated
+      console.log("Logged in via Supabase Auth");
+
+      // OPTIONALLY: fetch Account row to see type
+      const { data: accountRow } = await supabase
+        .from("Account")
+        .select("type")
+        .eq("email", email)
+        .maybeSingle();
+
+      const userTypeFromDb = accountRow?.type;
+
+      // redirect based on userType (borrower or lender)
+      if (userTypeFromDb === "borrower") {
+        window.location.href = "/borrower/credit-score";
+      } else if (userTypeFromDb === "lender") {
+        window.location.href = "/lender/requests";
+      } else {
+        // fallback
+        window.location.href = "/";
+      }
+
       setIsLoading(false);
       return;
     }
 
-    const user = data.user;
-    // You can store user type in user_metadata at signup
-    const metadataType = user?.user_metadata?.user_type;
+    // If Supabase says "invalid credentials", try OLD system
+    if (authError?.message === "Invalid login credentials") {
+      console.log("Supabase auth failed, trying legacy Account table...");
 
-    // 2) Optionally read type from Account table (if you still rely on it)
-    let finalType = metadataType;
-    if (!finalType) {
-      const { data: profile, error: profileError } = await supabase
+      // Look up in your old Account table
+      const { data: legacyUser, error: legacyError } = await supabase
         .from("Account")
-        .select("type")
-        .eq("email", loginData.email)
+        .select("password_hash, type")
+        .eq("email", email)
         .maybeSingle();
 
-      if (profileError) {
-        console.error("Profile type fetch error:", profileError);
+      if (legacyError || !legacyUser) {
+        alert("Invalid email or password");
+        setIsLoading(false);
+        return;
+      }
+
+      // Compare password with stored hash
+      const passwordCorrect = await bcrypt.compare(
+        password,
+        legacyUser.password_hash
+      );
+
+      if (!passwordCorrect) {
+        alert("Invalid email or password");
+        setIsLoading(false);
+        return;
+      }
+
+      // At this point, OLD login succeeded → create Supabase Auth user
+      console.log("Legacy login success – creating Supabase Auth user...");
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (signUpError) {
+        console.error("Error during Supabase signUp:", signUpError);
+        alert("Login migration failed. Please try again later.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Depending on Supabase email-confirmation settings:
+      // Email confirmation is ON: you'll need them to check their email
+
+      if (signUpData.session) {
+        console.log("User migrated & logged in via Supabase.");
+
+        if (legacyUser.type === "borrower") {
+          window.location.href = "/borrower/credit-score";
+        } else if (legacyUser.type === "lender") {
+          window.location.href = "/lender/requests";
+        } else {
+          window.location.href = "/";
+        }
+
+        setIsLoading(false);
+        return;
       } else {
-        finalType = profile?.type;
+        // Email confirmation flow
+        alert(
+          "We've updated your account. Please check your email to confirm before logging in."
+        );
+        setIsLoading(false);
+        return;
       }
     }
 
-    // Check that the chosen portal matches stored type
-    if (finalType && finalType !== userType) {
-      alert("Please select the correct portal type");
-      setIsLoading(false);
-      return;
-    }
-
-    // 3) Redirect based on userType
-    if (userType === "borrower") {
-      window.location.href = "/borrower/credit-score";
-    } else if (userType === "lender") {
-      window.location.href = "/lender/requests";
-    }
-
+    // Any other auth error
+    console.error("Supabase auth error:", authError);
+    alert(authError?.message || "Login failed");
     setIsLoading(false);
   };
 
