@@ -223,7 +223,8 @@ export default function BorrowerLoanStatus() {
             <div className="flex items-center mb-4 justify-between"> 
                 
           <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
-          <a
+          <div className="flex space-x-4">
+            <a
             href="/borrower/loans/loan-request"
             className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
           >
@@ -235,6 +236,8 @@ export default function BorrowerLoanStatus() {
           >
             Pay Loans
           </a>
+          </div>
+          
           </div>
           
           <p className="text-slate-600">Track the status of your loan requests</p>
