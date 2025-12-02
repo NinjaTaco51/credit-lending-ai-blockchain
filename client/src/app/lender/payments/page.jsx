@@ -15,6 +15,7 @@ export default function LenderPaymentStatus() {
   const [loans, setLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lenderEmail, setLenderEmail] = useState('');
   const [stats, setStats] = useState({
     totalLoans: 0,
     totalAmount: 0,
@@ -24,10 +25,17 @@ export default function LenderPaymentStatus() {
   });
 
   useEffect(() => {
-    fetchPaymentStatus();
+    const email = localStorage.getItem('userEmail');
+    if (!email) {
+      window.location.href = "/";
+      return;
+    }
+    setLenderEmail(email);
+
+    fetchPaymentStatus(email);
   }, []);
 
-  const fetchPaymentStatus = async () => {
+  const fetchPaymentStatus = async (email) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -37,6 +45,7 @@ export default function LenderPaymentStatus() {
         .from('loan_requests')
         .select('*')
         .eq('status', 'approved')
+        .eq('lender_email', email)
         .order('request_date', { ascending: false });
 
       if (loansError) throw loansError;

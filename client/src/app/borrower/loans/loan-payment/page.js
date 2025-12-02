@@ -9,12 +9,23 @@ export default function BorrowerPaymentDashboard() {
   const [loans, setLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [borrowerEmail, setBorrowerEmail] = useState('');
 
   useEffect(() => {
-    fetchBorrowerData();
+    const email = localStorage.getItem('userEmail');
+    if (!email) {
+      console.log('No user email found, redirecting to home.');
+      window.location.href = "/";
+      return;
+    }
+
+    console.log('Borrower email:[' + email + ']');
+    setBorrowerEmail(email);
+
+    fetchBorrowerData(email);
   }, []);
 
-  const fetchBorrowerData = async () => {
+  const fetchBorrowerData = async (email) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -24,6 +35,7 @@ export default function BorrowerPaymentDashboard() {
         .from('loan_requests')
         .select('*')
         .eq('status', 'approved')
+        .eq('borrower_email', email)
         .order('request_date', { ascending: false });
 
       if (loansError) throw loansError;
