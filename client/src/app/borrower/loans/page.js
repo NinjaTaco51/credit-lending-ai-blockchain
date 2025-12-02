@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Clock, TrendingUp } from 'lucide-react';
+import { Eye, DollarSign, User, Menu, X, AlertCircle, CheckCircle, LogOut, XCircle, Clock, CreditCard, BanknoteArrowDown } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
 export default function BorrowerLoanStatus() {
@@ -151,8 +151,9 @@ export default function BorrowerLoanStatus() {
   };
   
   const navItems = [
-    { icon: TrendingUp, label: 'Credit Score', href: '/borrower/credit-score' },
-    { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: CreditCard, label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
@@ -223,11 +224,17 @@ export default function BorrowerLoanStatus() {
                 
           <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
           <a
-                    href="/borrower/loans/loan-request"
-                    className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
-                  >
-                    Apply for a Loan
-                  </a>
+            href="/borrower/loans/loan-request"
+            className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+          >
+            Apply for a Loan
+          </a>
+          <a
+            href="/borrower/loans/loan-payment"
+            className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+          >
+            Pay Loans
+          </a>
           </div>
           
           <p className="text-slate-600">Track the status of your loan requests</p>

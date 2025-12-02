@@ -311,7 +311,7 @@ export default function LenderPaymentStatus() {
                     </div>
                     <div>
                       <p className="text-sm text-slate-600">Loan Term</p>
-                      <p className="font-semibold text-slate-800">{loan.loan_term_months} months</p>
+                      <p className="font-semibold text-slate-800">{loan.loan_term} months</p>
                     </div>
                   </div>
                 </div>

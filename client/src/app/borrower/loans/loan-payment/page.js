@@ -1,13 +1,8 @@
-// ============================================
-// BORROWER PAYMENT DASHBOARD
-// File: app/borrower/payments/page.jsx
-// ============================================
-
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, Clock, CheckCircle, AlertCircle, Menu, X, LogOut, User, CreditCard, TrendingUp } from 'lucide-react';
-import supabase from '../../../config/supabaseClient';
+import { Calendar, DollarSign, Clock, CheckCircle, AlertCircle, Menu, X, LogOut, User, CreditCard, BanknoteArrowDown } from 'lucide-react';
+import supabase from "../../../../config/supabaseClient"
 
 export default function BorrowerPaymentDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -67,10 +62,11 @@ export default function BorrowerPaymentDashboard() {
   };
 
   const navItems = [
-    { icon: DollarSign, label: 'Dashboard', href: '/borrower/dashboard' },
-    { icon: CreditCard, label: 'Payments', href: '/borrower/payments' },
+    { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
-    { icon: LogOut, label: 'Logout', href: '/logout' },
+    { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
 
   const handleMakePayment = async (payment) => {
