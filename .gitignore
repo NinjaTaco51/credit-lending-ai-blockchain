@@ -12,3 +12,7 @@ dist/
 # OS / editor junk
 .DS_Store
 .vscode/
+
+# cpython
+__pycache__/
+*.pyc

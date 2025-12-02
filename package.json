@@ -4,7 +4,7 @@
   "description": "A software engineering project for CS4800 that leverages artificial intelligence for credit risk assessment and blockchain for secure, transparent lending transactions. The platform aims to provide fair, data-driven credit scoring and a decentralized lending ecosystem.",
   "main": "index.js",
   "devDependencies": {
-    "hardhat": "^2.27.0"
+    "hardhat": "^2.27.1"
   },
   "scripts": {
     "test": "mocha"
