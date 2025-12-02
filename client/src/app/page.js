@@ -83,7 +83,7 @@ export default function AuthPages() {
     const email = loginData.email;
     const password = loginData.password;
 
-    // 1) Try Supabase Auth first
+    // Try Supabase Auth first
     const { data: authData, error: authError } =
       await supabase.auth.signInWithPassword({
         email,
@@ -91,25 +91,42 @@ export default function AuthPages() {
       });
 
     if (!authError && authData?.session) {
-      // Supabase login succeeded – user already migrated
       console.log("Logged in via Supabase Auth");
 
-      // OPTIONALLY: fetch Account row to see type
-      const { data: accountRow } = await supabase
+      // Get Account row to know if this is borrower or lender
+      const { data: accountRow, error: accountError } = await supabase
         .from("Account")
         .select("type")
         .eq("email", email)
         .maybeSingle();
 
-      const userTypeFromDb = accountRow?.type;
+      if (accountError || !accountRow) {
+        console.error("Account lookup error:", accountError);
+        alert("Account not found for this user.");
+        await supabase.auth.signOut();
+        setIsLoading(false);
+        return;
+      }
 
-      // redirect based on userType (borrower or lender)
+      const userTypeFromDb = accountRow.type; // 'borrower' or 'lender'
+
+      // ENFORCE CORRECT PORTAL
+      if (userTypeFromDb !== userType) {
+        // userType is the selected portal in your UI
+        await supabase.auth.signOut();
+        alert(
+          `This account is registered as a ${userTypeFromDb}. Please log in through the ${userTypeFromDb === 'borrower' ? 'Borrower' : 'Lender'} portal.`
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // If portal matches, send them to the correct dashboard
       if (userTypeFromDb === "borrower") {
         window.location.href = "/borrower/credit-score";
       } else if (userTypeFromDb === "lender") {
         window.location.href = "/lender/requests";
       } else {
-        // fallback
         window.location.href = "/";
       }
 
@@ -117,11 +134,10 @@ export default function AuthPages() {
       return;
     }
 
-    // If Supabase says "invalid credentials", try OLD system
+    // If Supabase says "invalid credentials", try OLD system (migration)
     if (authError?.message === "Invalid login credentials") {
       console.log("Supabase auth failed, trying legacy Account table...");
 
-      // Look up in your old Account table
       const { data: legacyUser, error: legacyError } = await supabase
         .from("Account")
         .select("password_hash, type")
@@ -134,7 +150,15 @@ export default function AuthPages() {
         return;
       }
 
-      // Compare password with stored hash
+      // ENFORCE CORRECT PORTAL *before* migrating to Auth
+      if (legacyUser.type !== userType) {
+        alert(
+          `This account is registered as a ${legacyUser.type}. Please log in through the ${legacyUser.type === 'borrower' ? 'Borrower' : 'Lender'} portal.`
+        );
+        setIsLoading(false);
+        return;
+      }
+
       const passwordCorrect = await bcrypt.compare(
         password,
         legacyUser.password_hash
@@ -146,13 +170,14 @@ export default function AuthPages() {
         return;
       }
 
-      // At this point, OLD login succeeded → create Supabase Auth user
+      // OLD login succeeded → create Supabase Auth user
       console.log("Legacy login success – creating Supabase Auth user...");
 
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
+      const { data: signUpData, error: signUpError } =
+        await supabase.auth.signUp({
+          email,
+          password,
+        });
 
       if (signUpError) {
         console.error("Error during Supabase signUp:", signUpError);
@@ -160,9 +185,6 @@ export default function AuthPages() {
         setIsLoading(false);
         return;
       }
-
-      // Depending on Supabase email-confirmation settings:
-      // Email confirmation is ON: you'll need them to check their email
 
       if (signUpData.session) {
         console.log("User migrated & logged in via Supabase.");
@@ -178,7 +200,6 @@ export default function AuthPages() {
         setIsLoading(false);
         return;
       } else {
-        // Email confirmation flow
         alert(
           "We've updated your account. Please check your email to confirm before logging in."
         );
@@ -187,11 +208,12 @@ export default function AuthPages() {
       }
     }
 
-    // Any other auth error
+    // Any other Supabase auth error
     console.error("Supabase auth error:", authError);
     alert(authError?.message || "Login failed");
     setIsLoading(false);
   };
+
 
   const handleSignupSubmit = async () => {
     if (
