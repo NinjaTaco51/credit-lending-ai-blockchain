@@ -9,6 +9,7 @@ export default function BorrowerDashboard() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [filterStatus, setFilterStatus] = useState('pending');
   const [loanRequests, setLoanRequests] = useState([]);
+  const [totalLoans, setTotalLoans] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hasWallet, setHasWallet] = useState(false);
@@ -24,6 +25,7 @@ export default function BorrowerDashboard() {
     
     // Check if lender has wallet connected
     checkLenderWallet(email);
+    fetchTotalLoanRequests();
     fetchLoanRequests();
   }, [filterStatus]);
   
@@ -57,7 +59,17 @@ export default function BorrowerDashboard() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (filterStatus !== 'all') {
+      // filter by the email specific to the current session user.
+      if (filterStatus === 'approved') {
+        query = query
+          .eq('lender_email', lenderEmail)
+          .eq('status', 'approved');
+      } else if (filterStatus === 'denied') {
+        query = query
+          .eq('lender_email', lenderEmail)
+          .eq('status', 'denied');
+      } else if (filterStatus !== 'all') {
+        // Normal status-based filters: pending / approved / denied
         query = query.eq('status', filterStatus);
       }
 
@@ -74,6 +86,7 @@ export default function BorrowerDashboard() {
         id: req.request_id,
         borrowerName: req.borrower_name,
         email: req.borrower_email,
+        lender_Email: req.lender_email,
         loanType: req.loan_type,
         loanAmount: Number(req.loan_amount),
         loanTerm: req.loan_term,
@@ -95,6 +108,16 @@ export default function BorrowerDashboard() {
     }
   };
   
+  const fetchTotalLoanRequests = async () => {
+    const { count, error } = await supabase
+      .from('loan_requests')
+      .select('*', { count: 'exact', head: true });
+
+    if (!error && typeof count === "number") {
+      setTotalLoans(count);
+    }
+  };
+
   const handleApprove = async (requestId) => {
     if (!hasWallet) {
       alert('You must connect your MetaMask wallet before approving loans. Please visit your profile to connect.');
@@ -104,7 +127,10 @@ export default function BorrowerDashboard() {
     try {
       const { error } = await supabase
         .from('loan_requests')
-        .update({ status: 'approved' })
+        .update({ 
+          status: 'approved',
+          lender_email: lenderEmail
+         })
         .eq('request_id', requestId);
 
       if (error) {
@@ -131,7 +157,10 @@ export default function BorrowerDashboard() {
     try {
       const { error } = await supabase
         .from('loan_requests')
-        .update({ status: 'denied' })
+        .update({ 
+          status: 'denied',
+          lender_email: lenderEmail
+        })
         .eq('request_id', requestId);
 
       if (error) {
@@ -268,7 +297,7 @@ export default function BorrowerDashboard() {
                 : 'bg-white text-slate-600 hover:bg-slate-100'
             }`}
           >
-            All Requests ({loanRequests.length})
+            All Requests ({totalLoans})
           </button>
           <button
             onClick={() => setFilterStatus('pending')}

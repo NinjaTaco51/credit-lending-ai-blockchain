@@ -162,29 +162,34 @@ export default function EditProfilePage() {
     try {
       const email = localStorage.getItem('userEmail');
       if (!email) {
-        throw new Error('No user email in localStorage');
+        console.error('❌ No user email in localStorage');
+        setWalletError('No user email found in localStorage. Are you logged in?');
+        return; // don't throw; just stop here
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('Account')
         .update({ wallet_address: address })
         .eq('email', email);
 
+      console.log('Supabase update result:', { data, error });
+
       if (error) {
-        console.error('Error saving wallet to Supabase:', error);
-        setWalletError('Wallet connected but failed to save to your profile. Please try again.');
-        throw error;
+        console.error('❌ Supabase error saving wallet:', error);
+        setWalletError(`Supabase error: ${error.message || 'Unknown error'}`);
+        return;
       }
 
-      console.log('Wallet saved successfully to Supabase');
+      console.log('✅ Wallet saved successfully to Supabase');
+      setWalletError(''); // clear any old errors
     } catch (error) {
-      console.error('Error saving wallet to backend:', error);
-      setWalletError('Wallet connected but failed to save to your profile. Please try again.');
-      throw error;
+      console.error('❌ Unexpected error saving wallet:', error);
+      setWalletError(`Unexpected error: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSavingWallet(false);
     }
   };
+
 
   // Disconnect wallet
   const disconnectWallet = async () => {
