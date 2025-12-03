@@ -12,14 +12,52 @@ export default function BorrowerLoanStatus() {
   const [allLoanRequests, setAllLoanRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Fetch on mount
+
+  // Track logged-in user's email
+  const [userEmail, setUserEmail] = useState('');
+
+  // Get logged-in user once on mount and set userEmail
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          console.error('Error getting user:', userError);
+          setError('You must be logged in to view your loan requests.');
+          if (typeof window !== 'undefined') {
+            window.location.href = '/';
+          }
+          return;
+        }
+
+        if (!user) {
+          setError('You must be logged in to view your loan requests.');
+          if (typeof window !== 'undefined') {
+            window.location.href = '/';
+          }
+          return;
+        }
+
+        setUserEmail(user.email);
+      } catch (err) {
+        console.error('Error initializing user:', err);
+        setError('Failed to determine logged-in user.');
+      }
+    };
+
+    init();
+  }, []);
+
+  // Fetch on mount (once we know the email)
   useEffect(() => {
     if (!userEmail) return; // don't run until email is set
     console.log('🔍 Searching for loan requests with email:', userEmail);
     fetchMyLoanRequests(userEmail);
   }, [userEmail]);
-
 
   useEffect(() => {
     if (allLoanRequests.length > 0) {
@@ -33,43 +71,16 @@ export default function BorrowerLoanStatus() {
     }
   }, [filterStatus, allLoanRequests]);
 
+  // Now this just uses the email argument; no extra auth lookup
   const fetchMyLoanRequests = async (email) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Get current user from Supabase Auth
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error("Error getting user:", userError);
-        setError("You must be logged in to view your loan requests.");
-        setIsLoading(false);
-        if (typeof window !== 'undefined') {
-          window.location.href = "/";
-        }
-        return;
-      }
-
-      if (!user) {
-        setError("You must be logged in to view your loan requests.");
-        setIsLoading(false);
-        if (typeof window !== 'undefined') {
-          window.location.href = "/";
-        }
-        return;
-      }
-
-      const userEmail = user.email;
-      console.log('🔍 Searching for loan requests with email:', userEmail);
-
       let query = supabase
         .from('loan_requests')
         .select('*')
-        .eq('borrower_email', email)       // ✅ use argument
+        .eq('borrower_email', email)
         .order('created_at', { ascending: false });
 
       const { data, error } = await query;
@@ -99,6 +110,10 @@ export default function BorrowerLoanStatus() {
         status: req.status,
         createdAt: req.created_at,
         transactionHash: req.transaction_hash,
+        blockNumber: req.block_number,
+        ethAmount: req.eth_amount,
+        lenderAddress: req.lender_address,
+        borrowerAddress: req.borrower_address,
       }));
 
       setAllLoanRequests(mapped);
@@ -116,7 +131,6 @@ export default function BorrowerLoanStatus() {
       setIsLoading(false);
     }
   };
-
 
   const getScoreColor = (score) => {
     if (score >= 800) return 'text-green-600 bg-green-50';
@@ -249,7 +263,7 @@ export default function BorrowerLoanStatus() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <div className="flex items-center mb-4 justify-between"> 
+          <div className="flex items-center mb-4 justify-between">
             <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
             <a
               href="/borrower/loans/loan-request"
@@ -285,37 +299,41 @@ export default function BorrowerLoanStatus() {
         <div className="mb-6 flex flex-wrap gap-2">
           <button
             onClick={() => setFilterStatus('all')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'all'
-              ? 'bg-slate-800 text-white'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-              }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'all'
+                ? 'bg-slate-800 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
           >
             All Applications ({stats.total})
           </button>
           <button
             onClick={() => setFilterStatus('pending')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'pending'
-              ? 'bg-yellow-600 text-white'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-              }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'pending'
+                ? 'bg-yellow-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
           >
             Pending ({stats.pending})
           </button>
           <button
             onClick={() => setFilterStatus('approved')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'approved'
-              ? 'bg-green-600 text-white'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-              }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'approved'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
           >
             Approved ({stats.approved})
           </button>
           <button
             onClick={() => setFilterStatus('denied')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'denied'
-              ? 'bg-red-600 text-white'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-              }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              filterStatus === 'denied'
+                ? 'bg-red-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
           >
             Denied ({stats.denied})
           </button>
@@ -354,8 +372,9 @@ export default function BorrowerLoanStatus() {
                 loanRequests.map((request) => (
                   <div
                     key={request.id}
-                    className={`bg-white rounded-lg shadow-md p-6 cursor-pointer transition-all hover:shadow-lg ${selectedRequest?.id === request.id ? 'ring-2 ring-blue-500' : ''
-                      }`}
+                    className={`bg-white rounded-lg shadow-md p-6 cursor-pointer transition-all hover:shadow-lg ${
+                      selectedRequest?.id === request.id ? 'ring-2 ring-blue-500' : ''
+                    }`}
                     onClick={() => setSelectedRequest(request)}
                   >
                     <div className="flex justify-between items-start mb-3">
@@ -369,21 +388,31 @@ export default function BorrowerLoanStatus() {
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div>
                         <p className="text-xs text-slate-500">Amount Requested</p>
-                        <p className="text-sm font-semibold text-slate-700">${request.loanAmount.toLocaleString()}</p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          ${request.loanAmount.toLocaleString()}
+                        </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Loan Term</p>
-                        <p className="text-sm font-semibold text-slate-700">{request.loanTerm} months</p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {request.loanTerm} months
+                        </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Credit Score</p>
-                        <p className={`text-sm font-bold px-2 py-1 rounded inline-block ${getScoreColor(request.creditScore)}`}>
+                        <p
+                          className={`text-sm font-bold px-2 py-1 rounded inline-block ${getScoreColor(
+                            request.creditScore
+                          )}`}
+                        >
                           {request.creditScore}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Application ID</p>
-                        <p className="text-xs font-mono text-slate-700">{request.id.substring(0, 8)}...</p>
+                        <p className="text-xs font-mono text-slate-700">
+                          {request.id.substring(0, 8)}...
+                        </p>
                       </div>
                     </div>
 
@@ -408,9 +437,17 @@ export default function BorrowerLoanStatus() {
                 <div className="bg-white rounded-lg shadow-md p-6">
                   {/* Status Alert */}
                   {selectedRequest.status && (
-                    <div className={`rounded-lg p-4 mb-4 border ${getStatusMessage(selectedRequest.status).color}`}>
-                      <h4 className="font-semibold mb-1">{getStatusMessage(selectedRequest.status).title}</h4>
-                      <p className="text-sm">{getStatusMessage(selectedRequest.status).message}</p>
+                    <div
+                      className={`rounded-lg p-4 mb-4 border ${
+                        getStatusMessage(selectedRequest.status).color
+                      }`}
+                    >
+                      <h4 className="font-semibold mb-1">
+                        {getStatusMessage(selectedRequest.status).title}
+                      </h4>
+                      <p className="text-sm">
+                        {getStatusMessage(selectedRequest.status).message}
+                      </p>
                     </div>
                   )}
 
@@ -437,28 +474,36 @@ export default function BorrowerLoanStatus() {
                         {selectedRequest.blockNumber && (
                           <div className="flex justify-between">
                             <span className="text-blue-700 font-medium">Block Number:</span>
-                            <span className="text-blue-800 font-mono">{selectedRequest.blockNumber}</span>
+                            <span className="text-blue-800 font-mono">
+                              {selectedRequest.blockNumber}
+                            </span>
                           </div>
                         )}
 
                         {selectedRequest.ethAmount && (
                           <div className="flex justify-between">
                             <span className="text-blue-700 font-medium">Amount Funded:</span>
-                            <span className="text-blue-800 font-semibold">{selectedRequest.ethAmount} ETH</span>
+                            <span className="text-blue-800 font-semibold">
+                              {selectedRequest.ethAmount} ETH
+                            </span>
                           </div>
                         )}
 
                         {selectedRequest.lenderAddress && (
                           <div>
                             <p className="text-blue-700 font-medium">Lender Address:</p>
-                            <p className="text-blue-800 font-mono text-xs break-all">{selectedRequest.lenderAddress}</p>
+                            <p className="text-blue-800 font-mono text-xs break-all">
+                              {selectedRequest.lenderAddress}
+                            </p>
                           </div>
                         )}
 
                         {selectedRequest.borrowerAddress && (
                           <div>
                             <p className="text-blue-700 font-medium">Your Wallet:</p>
-                            <p className="text-blue-800 font-mono text-xs break-all">{selectedRequest.borrowerAddress}</p>
+                            <p className="text-blue-800 font-mono text-xs break-all">
+                              {selectedRequest.borrowerAddress}
+                            </p>
                           </div>
                         )}
 
@@ -479,8 +524,12 @@ export default function BorrowerLoanStatus() {
 
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} </h3>
-                      <p className="text-sm text-slate-500">Application ID: {selectedRequest.id}</p>
+                      <h3 className="text-2xl font-bold text-slate-800">
+                        {selectedRequest.loanType}{' '}
+                      </h3>
+                      <p className="text-sm text-slate-500">
+                        Application ID: {selectedRequest.id}
+                      </p>
                     </div>
                     {getStatusBadge(selectedRequest.status)}
                   </div>
@@ -490,15 +539,21 @@ export default function BorrowerLoanStatus() {
                     <div className="space-y-3">
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-600">Amount Requested:</span>
-                        <span className="text-sm font-semibold text-slate-800">${selectedRequest.loanAmount.toLocaleString()}</span>
+                        <span className="text-sm font-semibold text-slate-800">
+                          ${selectedRequest.loanAmount.toLocaleString()}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-600">Loan Term:</span>
-                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.loanTerm} months</span>
+                        <span className="text-sm font-semibold text-slate-800">
+                          {selectedRequest.loanTerm} months
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-600">Application Date:</span>
-                        <span className="text-sm font-semibold text-slate-800">{selectedRequest.requestDate}</span>
+                        <span className="text-sm font-semibold text-slate-800">
+                          {selectedRequest.requestDate}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -510,30 +565,39 @@ export default function BorrowerLoanStatus() {
 
                   <div className="border-t border-slate-200 pt-4 mb-4">
                     <h4 className="text-sm font-semibold text-slate-700 mb-3">Your Credit Score</h4>
-                    <div className={`text-center py-4 rounded-lg ${getScoreColor(selectedRequest.creditScore)}`}>
+                    <div
+                      className={`text-center py-4 rounded-lg ${getScoreColor(
+                        selectedRequest.creditScore
+                      )}`}
+                    >
                       <div className="text-4xl font-bold">{selectedRequest.creditScore}</div>
-                      <div className="text-sm font-semibold mt-1">{selectedRequest.creditBand}</div>
+                      <div className="text-sm font-semibold mt-1">
+                        {selectedRequest.creditBand}
+                      </div>
                     </div>
                   </div>
 
-                  {Array.isArray(selectedRequest.reasons) && selectedRequest.reasons.length > 0 && (
-                    <div className="border-t border-slate-200 pt-4">
-                      <h4 className="text-sm font-semibold text-slate-700 mb-3">Credit Factors Considered</h4>
-                      <div className="space-y-2">
-                        {selectedRequest.reasons.map((reason, index) => (
-                          <div
-                            key={index}
-                            className="flex items-start bg-slate-50 rounded-lg p-3"
-                          >
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">
-                              {index + 1}
+                  {Array.isArray(selectedRequest.reasons) &&
+                    selectedRequest.reasons.length > 0 && (
+                      <div className="border-t border-slate-200 pt-4">
+                        <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                          Credit Factors Considered
+                        </h4>
+                        <div className="space-y-2">
+                          {selectedRequest.reasons.map((reason, index) => (
+                            <div
+                              key={index}
+                              className="flex items-start bg-slate-50 rounded-lg p-3"
+                            >
+                              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">
+                                {index + 1}
+                              </div>
+                              <p className="text-sm text-slate-700">{reason}</p>
                             </div>
-                            <p className="text-sm text-slate-700">{reason}</p>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               )}
             </div>
