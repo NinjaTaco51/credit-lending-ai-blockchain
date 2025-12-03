@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, Save, Mail, Phone, Calendar, Lock, Eye, EyeOff, Wallet, CheckCircle, AlertCircle, Shield, LogOut } from 'lucide-react';
+import { CreditCard, History, DollarSign, User, BanknoteArrowDown, FileText, BookOpen, HelpCircle, Menu, X, Save, Mail, Phone, Calendar, Lock, Eye, EyeOff, Wallet, CheckCircle, AlertCircle, Shield, LogOut } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 import bcrypt from 'bcryptjs';
 
@@ -472,9 +472,10 @@ export default function EditProfilePage() {
 
   const navItems = [
     { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
-    { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
+    { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
-    { icon: LogOut, label: 'Logout', href: '/logout' }
+    { icon: LogOut, label: 'Logout', href: '/logout'}
   ];
 
   return (

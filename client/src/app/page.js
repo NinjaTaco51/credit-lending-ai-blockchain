@@ -214,7 +214,22 @@ export default function AuthPages() {
     setIsLoading(false);
   };
 
+  function isAtLeast18(dob) {
+    const birthDate = new Date(dob);
+    const today = new Date();
 
+    const age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    const dayDiff = today.getDate() - birthDate.getDate();
+
+    // Adjust if birthday hasn't happened yet this year
+    if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+      return age - 1 >= 18;
+    }
+
+    return age >= 18;
+  }
+  
   const handleSignupSubmit = async () => {
     if (
       !signupData.email ||
@@ -246,7 +261,13 @@ export default function AuthPages() {
       alert("Passwords do not match!");
       return;
     }
-
+    
+    // check minimum age
+    if (!isAtLeast18(signupData.dob)) {
+      alert("You must be at least 18 years old to create an account.");
+      return;
+    }
+    
     setIsLoading(true);
 
     // 1) Create auth user in Supabase

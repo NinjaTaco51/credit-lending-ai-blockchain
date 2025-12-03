@@ -22,7 +22,13 @@ export default function EditProfilePage() {
     confirmPassword: ''
   });
 
-    function isValidEmail(email) {
+  // MetaMask state
+  const [walletAddress, setWalletAddress] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [walletError, setWalletError] = useState('');
+  const [isSavingWallet, setIsSavingWallet] = useState(false);
+
+  function isValidEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (emailRegex.test(email)) {
       return true;
@@ -44,6 +50,211 @@ export default function EditProfilePage() {
     }
     return false;
   }
+
+  useEffect(() => {
+    checkIfWalletIsConnected();
+    loadUserWalletFromBackend();
+  }, []);
+
+  // Load user's saved wallet address from backend
+  const loadUserWalletFromBackend = async () => {
+    try {
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        console.warn('No userEmail in localStorage');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('Account')
+        .select('wallet_address')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading wallet from Supabase:', error);
+        return;
+      }
+
+      if (data && data.wallet_address) {
+        setWalletAddress(data.wallet_address);
+        console.log('Wallet loaded from Supabase:', data.wallet_address);
+      } else {
+        console.log('No wallet saved for this lender yet');
+      }
+    } catch (error) {
+      console.error('Error loading wallet address:', error);
+    }
+  };
+
+  // Check if MetaMask is installed and wallet is already connected
+  const checkIfWalletIsConnected = async () => {
+    try {
+      if (typeof window.ethereum !== 'undefined') {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts.length > 0) {
+          console.log('MetaMask wallet available:', accounts[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking wallet connection:', error);
+    }
+  };
+
+  // Connect MetaMask wallet
+  const connectWallet = async () => {
+    setIsConnecting(true);
+    setWalletError('');
+
+    try {
+      if (typeof window.ethereum === 'undefined') {
+        setWalletError('MetaMask is not installed. Please install MetaMask extension from metamask.io');
+        setIsConnecting(false);
+        return;
+      }
+
+      console.log('MetaMask detected, requesting accounts...');
+
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts'
+      });
+
+      console.log('Accounts received:', accounts);
+
+      if (!accounts || accounts.length === 0) {
+        setWalletError('No accounts found. Please create a MetaMask account first.');
+        setIsConnecting(false);
+        return;
+      }
+
+      const connectedAddress = accounts[0];
+      console.log('Connected address:', connectedAddress);
+
+      setWalletAddress(connectedAddress);
+      setWalletError('');
+      console.log('Wallet connected successfully!');
+
+      try {
+        await saveWalletToBackend(connectedAddress);
+      } catch (error) {
+        console.error('Supabase save failed, but wallet is connected locally');
+      }
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+
+      if (error.code === 4001) {
+        setWalletError('Connection rejected. Please approve the connection in MetaMask.');
+      } else if (error.code === -32002) {
+        setWalletError('Connection request pending. Please check MetaMask for a pending request.');
+      } else {
+        setWalletError(`Failed to connect wallet: ${error.message || 'Unknown error'}`);
+      }
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // Save wallet address to backend
+  const saveWalletToBackend = async (address) => {
+    setIsSavingWallet(true);
+    try {
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        console.error('❌ No user email in localStorage');
+        setWalletError('No user email found in localStorage. Are you logged in?');
+        return; // don't throw; just stop here
+      }
+
+      const { data, error } = await supabase
+        .from('Account')
+        .update({ wallet_address: address })
+        .eq('email', email);
+
+      console.log('Supabase update result:', { data, error });
+
+      if (error) {
+        console.error('❌ Supabase error saving wallet:', error);
+        setWalletError(`Supabase error: ${error.message || 'Unknown error'}`);
+        return;
+      }
+
+      console.log('✅ Wallet saved successfully to Supabase');
+      setWalletError(''); // clear any old errors
+    } catch (error) {
+      console.error('❌ Unexpected error saving wallet:', error);
+      setWalletError(`Unexpected error: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsSavingWallet(false);
+    }
+  };
+
+
+  // Disconnect wallet
+  const disconnectWallet = async () => {
+    try {
+      console.log('Disconnecting wallet...');
+
+      const email = localStorage.getItem('userEmail');
+      if (!email) {
+        throw new Error('No user email in localStorage');
+      }
+
+      const { error } = await supabase
+        .from('Account')
+        .update({ wallet_address: null })
+        .eq('email', email);
+
+      if (error) {
+        console.error('Error clearing wallet in Supabase:', error);
+        setWalletError('Failed to disconnect wallet. Please try again.');
+        return;
+      }
+
+      setWalletAddress('');
+      setWalletError('');
+      console.log('Wallet disconnected successfully');
+    } catch (error) {
+      console.error('Error disconnecting wallet:', error);
+      setWalletError('Failed to disconnect wallet. Please try again.');
+    }
+  };
+
+  // Listen for account changes
+  useEffect(() => {
+    if (typeof window.ethereum !== 'undefined') {
+      window.ethereum.on('accountsChanged', async (accounts) => {
+        if (accounts.length > 0 && walletAddress) {
+          const newAddress = accounts[0];
+          try {
+            await saveWalletToBackend(newAddress);
+            setWalletAddress(newAddress);
+          } catch (error) {
+            setWalletError('Failed to update wallet address. Please reconnect.');
+          }
+        } else if (accounts.length === 0) {
+          setWalletAddress('');
+        }
+      });
+
+      window.ethereum.on('chainChanged', () => {
+        window.location.reload();
+      });
+    }
+
+    return () => {
+      if (typeof window.ethereum !== 'undefined') {
+        window.ethereum.removeAllListeners('accountsChanged');
+        window.ethereum.removeAllListeners('chainChanged');
+      }
+    };
+  }, [walletAddress]);
+
+  // Format wallet address for display
+  const formatAddress = (address) => {
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  };
   
   useEffect(() => {
     const fetchAndPrefill = async () => {
@@ -203,14 +414,14 @@ export default function EditProfilePage() {
       confirmPassword: '',
     });
 
-    alert('Profile Updated');
-  };
+    alert("Profile Updated Successfully")
+  }
   
- const navItems = [
+  const navItems = [
     { icon: DollarSign, label: 'Loan Requests', href: '/lender/requests' },
     { icon: User, label: 'Profile', href: '/lender/profile' },
     { icon: LogOut, label: 'Logout', href: '/logout'}
-   ];
+  ];
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -220,11 +431,10 @@ export default function EditProfilePage() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <h1 className="text-2xl font-bold text-slate-800">CreditView</h1>
+                <h1 className="text-2xl font-bold text-slate-800">CreditView Lender</h1>
               </div>
             </div>
             
-            {/* Desktop Navigation */}
             <div className="hidden lg:flex space-x-1">
               {navItems.map((item) => (
                 <a
@@ -238,7 +448,6 @@ export default function EditProfilePage() {
               ))}
             </div>
             
-            {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-2 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -248,7 +457,6 @@ export default function EditProfilePage() {
           </div>
         </div>
         
-        {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white">
             <div className="px-2 pt-2 pb-3 space-y-1">
@@ -285,15 +493,14 @@ export default function EditProfilePage() {
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Name */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Full Name <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                    <User className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
                     <input
-                      type="name"
+                      type="text"
                       name="name"
                       value={profileData.name}
                       onChange={handleInputChange}
@@ -303,7 +510,6 @@ export default function EditProfilePage() {
                   </div>
                 </div>
 
-                {/* Email */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Email Address <span className="text-red-500">*</span>
@@ -323,6 +529,113 @@ export default function EditProfilePage() {
               </div>
             </div>
 
+            {/* Web3 Wallet Section */}
+            <div className="pt-6 border-t border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+                <Wallet className="w-5 h-5 mr-2" />
+                Web3 Wallet Connection
+              </h3>
+
+              <div className="space-y-4">
+                <p className="text-sm text-slate-600">
+                  Connect your MetaMask wallet to approve/deny loan requests and enable blockchain-based transactions.
+                </p>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <Shield className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-semibold text-amber-900 mb-1">Security Notice</h4>
+                      <p className="text-xs text-amber-800">
+                        We only store your public wallet address. Your private keys remain secure in your MetaMask wallet and are never shared with our platform.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {walletError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
+                    <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-semibold text-red-800 mb-1">Connection Error</h4>
+                      <p className="text-sm text-red-700">{walletError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {walletAddress ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start flex-1">
+                        <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-green-800 mb-1">Wallet Connected</h4>
+                          <p className="text-sm text-green-700 mb-2">
+                            Your MetaMask wallet is successfully connected and saved to your profile
+                          </p>
+                          <div className="bg-white rounded-md p-3 border border-green-200">
+                            <p className="text-xs text-slate-500 mb-1">Wallet Address (Public)</p>
+                            <p className="text-sm font-mono text-slate-900 break-all">{walletAddress}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={disconnectWallet}
+                      className="mt-4 w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Disconnect Wallet
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <div className="flex items-start mb-4">
+                      <Wallet className="w-5 h-5 text-slate-600 mt-0.5 mr-3 flex-shrink-0" />
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-800 mb-1">No Wallet Connected</h4>
+                        <p className="text-sm text-slate-600">
+                          Connect your MetaMask wallet to process loan requests
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={connectWallet}
+                      disabled={isConnecting || isSavingWallet}
+                      className="w-full px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                      <Wallet className="w-4 h-4 mr-2" />
+                      {isConnecting ? 'Connecting...' : isSavingWallet ? 'Saving...' : 'Connect MetaMask Wallet'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-2 flex items-center">
+                    <HelpCircle className="w-4 h-4 mr-2" />
+                    Why Connect a Wallet?
+                  </h4>
+                  <ul className="space-y-1 text-sm text-blue-800">
+                    <li className="flex items-start">
+                      <span className="mr-2">•</span>
+                      <span>Required to approve or deny loan requests</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="mr-2">•</span>
+                      <span>Disburse loans in cryptocurrency</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="mr-2">•</span>
+                      <span>Secure blockchain-verified transactions</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="mr-2">•</span>
+                      <span>Track loan repayments on-chain</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
             {/* Change Password Section */}
             <div className="pt-6 border-t border-slate-200">
               <h3 className="text-lg font-semibold text-slate-800 flex items-center">
@@ -333,7 +646,6 @@ export default function EditProfilePage() {
               <p className="mb-4 text-sm text-red-500">Current Password Needed to make New Password</p>
               
               <div className="space-y-4">
-                {/* Current Password */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Current Password
@@ -358,7 +670,6 @@ export default function EditProfilePage() {
                   </div>
                 </div>
                 
-                {/* New Password */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     New Password
@@ -386,7 +697,6 @@ export default function EditProfilePage() {
                   </p>
                 </div>
                 
-                {/* Confirm New Password */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Confirm New Password
