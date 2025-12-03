@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, DollarSign, User, Menu, X, AlertCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle, BanknoteArrowDown } from 'lucide-react';
+import { CreditCard, DollarSign, User, Menu, X, CheckCircle, AlertCircle, Home, Car, GraduationCap, Briefcase, LogOut, HelpCircle, BanknoteArrowDown } from 'lucide-react';
 import supabase from "../../../../config/supabaseClient"
 
 export default function LoanRequestPage() {
@@ -79,67 +79,67 @@ export default function LoanRequestPage() {
   };
 
   const handleSubmit = async () => {
-  if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose) {
-    alert('Please fill in all required fields');
-    return;
-  }
-
-  setIsLoading(true);
-
-  try {
-    const requestId = `LR-${Date.now()}`;
-    const requestDate = new Date().toISOString().split('T')[0];
-
-    const { data, error } = await supabase
-      .from('loan_requests')
-      .insert({
-        request_id: requestId,
-        borrower_email: userEmail,
-        borrower_name: userName,
-        loan_type: getLoanTypeLabel(loanRequest.loanType),
-        loan_amount: parseFloat(loanRequest.loanAmount),
-        loan_term: parseInt(loanRequest.loanTerm),
-        loan_purpose: loanRequest.loanPurpose,
-        credit_score: userCreditScore,
-        credit_band: creditBand,
-        reasons: creditReasons,
-        request_date: requestDate,
-        status: 'pending'
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Failed to submit loan request:', error);
-      alert('Failed to submit loan request: ' + error.message);
-    } else {
-      alert(
-        `Loan request submitted successfully! Request ID: ${requestId}\n\nYou will receive a response within 24-48 hours.`
-      );
-
-      setLoanRequest({
-        loanType: '',
-        loanAmount: '',
-        loanPurpose: '',
-        loanTerm: '',
-        lenderEmail: ''
-      });
+    if (!loanRequest.loanType || !loanRequest.loanAmount || !loanRequest.loanTerm || !loanRequest.loanPurpose) {
+      alert('Please fill in all required fields');
+      return;
     }
-  } catch (error) {
-    console.error('Error submitting loan request:', error);
-    alert('An error occurred while submitting your request. Please try again.');
-  } finally {
-    setIsLoading(false);
-  }
-};
+
+    setIsLoading(true);
+
+    try {
+      const requestId = `LR-${Date.now()}`;
+      const requestDate = new Date().toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('loan_requests')
+        .insert({
+          request_id: requestId,
+          borrower_email: userEmail,
+          borrower_name: userName,
+          loan_type: getLoanTypeLabel(loanRequest.loanType),
+          loan_amount: parseFloat(loanRequest.loanAmount),
+          loan_term: parseInt(loanRequest.loanTerm),
+          loan_purpose: loanRequest.loanPurpose,
+          credit_score: userCreditScore,
+          credit_band: creditBand,
+          reasons: creditReasons,
+          request_date: requestDate,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Failed to submit loan request:', error);
+        alert('Failed to submit loan request: ' + error.message);
+      } else {
+        alert(
+          `Loan request submitted successfully! Request ID: ${requestId}\n\nYou will receive a response within 24-48 hours.`
+        );
+
+        setLoanRequest({
+          loanType: '',
+          loanAmount: '',
+          loanPurpose: '',
+          loanTerm: '',
+          lenderEmail: ''
+        });
+      }
+    } catch (error) {
+      console.error('Error submitting loan request:', error);
+      alert('An error occurred while submitting your request. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
 
   const navItems = [
-    { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: CreditCard, label: 'Credit Score', href: '/borrower/credit-score' },
     { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
     { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
-    { icon: LogOut, label: 'Logout', href: '/logout'}
+    { icon: LogOut, label: 'Logout', href: '/logout' }
   ];
 
   const loanTypes = [
@@ -223,125 +223,126 @@ export default function LoanRequestPage() {
                   href="/borrower/credit-score"
                   className="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
                 >
-                  Go to Credit Scoring Page 
+                  Go to Credit Scoring Page
                 </a>
               </div>
             </div>
           </div>
         ) : (
           <div className="max-w-3xl mx-auto mb-6">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
-              <AlertCircle className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
-                {userCreditScore >= 580 ?               
+            {userCreditScore >= 580 ?
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
+                <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
                 <div className="flex-1">
                   <h3 className="text-sm font-semibold text-green-800 mb-1">Credit Check Complete</h3>
                   <p className="text-sm text-green-700">
                     Your credit score: <span className="font-bold">{userCreditScore}</span> ({creditBand}) - You're eligible to apply for loans
-                  </p> 
-                </div> :
+                  </p>
+                </div>
+              </div> :
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
                 <div className="flex-1">
                   <h3 className="text-sm font-semibold text-red-800 mb-1">Credit Check Complete</h3>
                   <p className="text-sm text-red-700">
                     Your credit score: <span className="font-bold">{userCreditScore}</span> ({creditBand}) - You may not be approved for loans based on your credit score
                   </p>
                 </div>
-                }
               </div>
-            </div>
-        )}
+            }
+          </div>
+  )
+}
 
-        {/* Loan Request Form */}
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-lg p-8">
-            <div className={`space-y-6 ${!hasCreditScore ? 'opacity-50 pointer-events-none' : ''}`}>
-              {/* Loan Type Selection */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-3">
-                  Loan Type <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {loanTypes.map((type) => (
-                    <button
-                      key={type.value}
-                      onClick={() => setLoanRequest({ ...loanRequest, loanType: type.value })}
-                      className={`flex items-center p-4 border-2 rounded-lg transition-all ${
-                        loanRequest.loanType === type.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <type.icon className={`w-6 h-6 mr-3 ${
-                        loanRequest.loanType === type.value ? 'text-blue-600' : 'text-slate-400'
-                      }`} />
-                      <span className={`font-medium ${
-                        loanRequest.loanType === type.value ? 'text-blue-900' : 'text-slate-700'
-                      }`}>
-                        {type.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+{/* Loan Request Form */ }
+<div className="max-w-3xl mx-auto">
+  <div className="bg-white rounded-2xl shadow-lg p-8">
+    <div className={`space-y-6 ${!hasCreditScore ? 'opacity-50 pointer-events-none' : ''}`}>
+      {/* Loan Type Selection */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-3">
+          Loan Type <span className="text-red-500">*</span>
+        </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {loanTypes.map((type) => (
+            <button
+              key={type.value}
+              onClick={() => setLoanRequest({ ...loanRequest, loanType: type.value })}
+              className={`flex items-center p-4 border-2 rounded-lg transition-all ${loanRequest.loanType === type.value
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-slate-200 hover:border-slate-300'
+                }`}
+            >
+              <type.icon className={`w-6 h-6 mr-3 ${loanRequest.loanType === type.value ? 'text-blue-600' : 'text-slate-400'
+                }`} />
+              <span className={`font-medium ${loanRequest.loanType === type.value ? 'text-blue-900' : 'text-slate-700'
+                }`}>
+                {type.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-              {/* Loan Amount and Term */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Loan Amount <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-2.5 text-slate-500">$</span>
-                    <input
-                      type="number"
-                      name="loanAmount"
-                      value={loanRequest.loanAmount}
-                      onChange={handleInputChange}
-                      className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
-                      placeholder="50000"
-                    />
-                  </div>
-                </div>
+      {/* Loan Amount and Term */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Loan Amount <span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <span className="absolute left-4 top-2.5 text-slate-500">$</span>
+            <input
+              type="number"
+              name="loanAmount"
+              value={loanRequest.loanAmount}
+              onChange={handleInputChange}
+              className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
+              placeholder="50000"
+            />
+          </div>
+        </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Loan Term <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="loanTerm"
-                    value={loanRequest.loanTerm}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
-                  >
-                    <option value="">Select term</option>
-                    <option value="12">12 months</option>
-                    <option value="24">24 months</option>
-                    <option value="36">36 months</option>
-                    <option value="48">48 months</option>
-                    <option value="60">60 months</option>
-                    <option value="120">120 months (10 years)</option>
-                    <option value="180">180 months (15 years)</option>
-                    <option value="240">240 months (20 years)</option>
-                    <option value="360">360 months (30 years)</option>
-                  </select>
-                </div>
-              </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Loan Term <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="loanTerm"
+            value={loanRequest.loanTerm}
+            onChange={handleInputChange}
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
+          >
+            <option value="">Select term</option>
+            <option value="12">12 months</option>
+            <option value="24">24 months</option>
+            <option value="36">36 months</option>
+            <option value="48">48 months</option>
+            <option value="60">60 months</option>
+            <option value="120">120 months (10 years)</option>
+            <option value="180">180 months (15 years)</option>
+            <option value="240">240 months (20 years)</option>
+            <option value="360">360 months (30 years)</option>
+          </select>
+        </div>
+      </div>
 
-              {/* Loan Purpose */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Loan Purpose <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  name="loanPurpose"
-                  value={loanRequest.loanPurpose}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
-                  placeholder="Describe what you'll use the loan for..."
-                  rows="3"
-                />
-              </div>
+      {/* Loan Purpose */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          Loan Purpose <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          name="loanPurpose"
+          value={loanRequest.loanPurpose}
+          onChange={handleInputChange}
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 mb-2"
+          placeholder="Describe what you'll use the loan for..."
+          rows="3"
+        />
+      </div>
 
-              {/* Lender Email (NEW) 
+      {/* Lender Email (NEW) 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Lender Email <span className="text-red-500">*</span>
@@ -357,46 +358,46 @@ export default function LoanRequestPage() {
               </div>
               */}
 
-              {/* Submit Button */}
-              <button
-                onClick={handleSubmit}
-                disabled={isLoading || !hasCreditScore}
-                className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Submitting Request...' : 'Submit Loan Request'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Information Box */}
-        <div className="max-w-3xl mx-auto mt-8">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-blue-900 mb-2 flex items-center">
-              <HelpCircle className="w-5 h-5 mr-2" />
-              What Happens Next?
-            </h3>
-            <ul className="space-y-2 text-sm text-blue-800">
-              <li className="flex items-start">
-                <span className="font-bold mr-2">1.</span>
-                <span>Your application will be reviewed by our lending team within 24-48 hours</span>
-              </li>
-              <li className="flex items-start">
-                <span className="font-bold mr-2">2.</span>
-                <span>We may contact you for additional documentation or information</span>
-              </li>
-              <li className="flex items-start">
-                <span className="font-bold mr-2">3.</span>
-                <span>You'll receive loan offers from multiple lenders with terms and rates</span>
-              </li>
-              <li className="flex items-start">
-                <span className="font-bold mr-2">4.</span>
-                <span>Review and accept the offer that works best for you</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </main>
+      {/* Submit Button */}
+      <button
+        onClick={handleSubmit}
+        disabled={isLoading || !hasCreditScore}
+        className="w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isLoading ? 'Submitting Request...' : 'Submit Loan Request'}
+      </button>
     </div>
+  </div>
+</div>
+
+{/* Information Box */ }
+<div className="max-w-3xl mx-auto mt-8">
+  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+    <h3 className="text-lg font-semibold text-blue-900 mb-2 flex items-center">
+      <HelpCircle className="w-5 h-5 mr-2" />
+      What Happens Next?
+    </h3>
+    <ul className="space-y-2 text-sm text-blue-800">
+      <li className="flex items-start">
+        <span className="font-bold mr-2">1.</span>
+        <span>Your application will be reviewed by our lending team within 24-48 hours</span>
+      </li>
+      <li className="flex items-start">
+        <span className="font-bold mr-2">2.</span>
+        <span>We may contact you for additional documentation or information</span>
+      </li>
+      <li className="flex items-start">
+        <span className="font-bold mr-2">3.</span>
+        <span>You'll receive loan offers from multiple lenders with terms and rates</span>
+      </li>
+      <li className="flex items-start">
+        <span className="font-bold mr-2">4.</span>
+        <span>Review and accept the offer that works best for you</span>
+      </li>
+    </ul>
+  </div>
+</div>
+      </main >
+    </div >
   );
 }

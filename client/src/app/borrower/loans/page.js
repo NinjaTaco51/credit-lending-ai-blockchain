@@ -12,17 +12,31 @@ export default function BorrowerLoanStatus() {
   const [allLoanRequests, setAllLoanRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  const userEmail = localStorage.getItem('userEmail');
-  
+  const [userEmail, setUserEmail] = useState('');
+
+  // Get email from localStorage once on the client
   useEffect(() => {
+    if (typeof window === 'undefined') return; // safety for SSR/tests
+
+    const email = window.localStorage.getItem('userEmail');
+    if (!email) {
+      console.log('No user email found, redirecting to home.');
+      window.location.href = "/";
+      return;
+    }
+
+    console.log('🔍 Found user email in localStorage:', email);
+    setUserEmail(email);
+  }, []);
+
+  // Fetch loan requests when we have an email
+  useEffect(() => {
+    if (!userEmail) return; // don't run until email is set
     console.log('🔍 Searching for loan requests with email:', userEmail);
-  }, []);
-  
-  useEffect(() => {
-    fetchMyLoanRequests();
-  }, []);
-  
+    fetchMyLoanRequests(userEmail);
+  }, [userEmail]);
+
+
   useEffect(() => {
     if (allLoanRequests.length > 0) {
       if (filterStatus === 'all') {
@@ -32,8 +46,8 @@ export default function BorrowerLoanStatus() {
       }
     }
   }, [filterStatus, allLoanRequests]);
-  
-  const fetchMyLoanRequests = async () => {
+
+  const fetchMyLoanRequests = async (email) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -41,7 +55,7 @@ export default function BorrowerLoanStatus() {
       let query = supabase
         .from('loan_requests')
         .select('*')
-        .eq('borrower_email', userEmail)
+        .eq('borrower_email', email)       // ✅ use argument
         .order('created_at', { ascending: false });
 
       const { data, error } = await query;
@@ -74,7 +88,7 @@ export default function BorrowerLoanStatus() {
       }));
 
       setAllLoanRequests(mapped);
-      
+
       if (filterStatus === 'all') {
         setLoanRequests(mapped);
       } else {
@@ -88,7 +102,8 @@ export default function BorrowerLoanStatus() {
       setIsLoading(false);
     }
   };
-  
+
+
   const getScoreColor = (score) => {
     if (score >= 800) return 'text-green-600 bg-green-50';
     if (score >= 740) return 'text-blue-600 bg-blue-50';
@@ -96,9 +111,9 @@ export default function BorrowerLoanStatus() {
     if (score >= 580) return 'text-orange-600 bg-orange-50';
     return 'text-red-600 bg-red-50';
   };
-  
+
   const getStatusBadge = (status) => {
-    switch(status) {
+    switch (status) {
       case 'pending':
         return (
           <span className="px-3 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 flex items-center gap-1">
@@ -124,9 +139,9 @@ export default function BorrowerLoanStatus() {
         return null;
     }
   };
-  
+
   const getStatusMessage = (status) => {
-    switch(status) {
+    switch (status) {
       case 'pending':
         return {
           title: 'Application Under Review',
@@ -149,22 +164,22 @@ export default function BorrowerLoanStatus() {
         return null;
     }
   };
-  
+
   const navItems = [
-    { icon: CreditCard, label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: CreditCard, label: 'Credit Score', href: '/borrower/credit-score' },
     { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
     { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
-    { icon: LogOut, label: 'Logout', href: '/logout'}
+    { icon: LogOut, label: 'Logout', href: '/logout' }
   ];
-  
+
   const stats = {
     total: allLoanRequests.length,
     pending: allLoanRequests.filter(r => r.status === 'pending').length,
     approved: allLoanRequests.filter(r => r.status === 'approved').length,
     denied: allLoanRequests.filter(r => r.status === 'denied').length,
   };
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Navigation Bar */}
@@ -176,7 +191,7 @@ export default function BorrowerLoanStatus() {
                 <h1 className="text-2xl font-bold text-slate-800">CreditView</h1>
               </div>
             </div>
-            
+
             <div className="hidden lg:flex space-x-1">
               {navItems.map((item) => (
                 <a
@@ -189,7 +204,7 @@ export default function BorrowerLoanStatus() {
                 </a>
               ))}
             </div>
-            
+
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-2 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -198,7 +213,7 @@ export default function BorrowerLoanStatus() {
             </button>
           </div>
         </div>
-        
+
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white">
             <div className="px-2 pt-2 pb-3 space-y-1">
@@ -216,33 +231,33 @@ export default function BorrowerLoanStatus() {
           </div>
         )}
       </nav>
-      
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-            <div className="flex items-center mb-4 justify-between"> 
-                
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
-          <div className="flex space-x-4">
-            <a
-            href="/borrower/loans/loan-request"
-            className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
-          >
-            Apply for a Loan
-          </a>
-          <a
-            href="/borrower/loans/loan-payment"
-            className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
-          >
-            Pay Loans
-          </a>
+          <div className="flex items-center mb-4 justify-between">
+
+            <h2 className="text-3xl font-bold text-slate-800 mb-2">My Loan Applications</h2>
+            <div className="flex space-x-4">
+              <a
+                href="/borrower/loans/loan-request"
+                className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+              >
+                Apply for a Loan
+              </a>
+              <a
+                href="/borrower/loans/loan-payment"
+                className="inline-block px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+              >
+                Pay Loans
+              </a>
+            </div>
+
           </div>
-          
-          </div>
-          
+
           <p className="text-slate-600">Track the status of your loan requests</p>
         </div>
-        
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow p-4">
@@ -262,58 +277,54 @@ export default function BorrowerLoanStatus() {
             <p className="text-2xl font-bold text-red-800">{stats.denied}</p>
           </div>
         </div>
-        
+
         {/* Filter Tabs */}
         <div className="mb-6 flex flex-wrap gap-2">
           <button
             onClick={() => setFilterStatus('all')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filterStatus === 'all'
-                ? 'bg-slate-800 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-100'
-            }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'all'
+              ? 'bg-slate-800 text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-100'
+              }`}
           >
             All Applications ({stats.total})
           </button>
           <button
             onClick={() => setFilterStatus('pending')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filterStatus === 'pending'
-                ? 'bg-yellow-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-100'
-            }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'pending'
+              ? 'bg-yellow-600 text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-100'
+              }`}
           >
             Pending ({stats.pending})
           </button>
           <button
             onClick={() => setFilterStatus('approved')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filterStatus === 'approved'
-                ? 'bg-green-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-100'
-            }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'approved'
+              ? 'bg-green-600 text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-100'
+              }`}
           >
             Approved ({stats.approved})
           </button>
           <button
             onClick={() => setFilterStatus('denied')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filterStatus === 'denied'
-                ? 'bg-red-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-100'
-            }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filterStatus === 'denied'
+              ? 'bg-red-600 text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-100'
+              }`}
           >
             Denied ({stats.denied})
           </button>
         </div>
-        
+
         {/* Error Message */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-800">{error}</p>
           </div>
         )}
-        
+
         {/* Loading State */}
         {isLoading ? (
           <div className="text-center py-12">
@@ -340,9 +351,8 @@ export default function BorrowerLoanStatus() {
                 loanRequests.map((request) => (
                   <div
                     key={request.id}
-                    className={`bg-white rounded-lg shadow-md p-6 cursor-pointer transition-all hover:shadow-lg ${
-                      selectedRequest?.id === request.id ? 'ring-2 ring-blue-500' : ''
-                    }`}
+                    className={`bg-white rounded-lg shadow-md p-6 cursor-pointer transition-all hover:shadow-lg ${selectedRequest?.id === request.id ? 'ring-2 ring-blue-500' : ''
+                      }`}
                     onClick={() => setSelectedRequest(request)}
                   >
                     <div className="flex justify-between items-start mb-3">
@@ -352,7 +362,7 @@ export default function BorrowerLoanStatus() {
                       </div>
                       {getStatusBadge(request.status)}
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div>
                         <p className="text-xs text-slate-500">Amount Requested</p>
@@ -373,7 +383,7 @@ export default function BorrowerLoanStatus() {
                         <p className="text-xs font-mono text-slate-700">{request.id.substring(0, 8)}...</p>
                       </div>
                     </div>
-                    
+
                     <button className="w-full mt-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-md transition-colors flex items-center justify-center">
                       <Eye className="w-4 h-4 mr-2" />
                       View Details
@@ -382,7 +392,7 @@ export default function BorrowerLoanStatus() {
                 ))
               )}
             </div>
-            
+
             {/* Request Details Panel */}
             <div className="lg:sticky lg:top-8 h-fit">
               {!selectedRequest ? (
@@ -400,7 +410,7 @@ export default function BorrowerLoanStatus() {
                       <p className="text-sm">{getStatusMessage(selectedRequest.status).message}</p>
                     </div>
                   )}
-                  
+
                   {/* Blockchain Transaction Info - Show for approved loans */}
                   {selectedRequest.status === 'approved' && selectedRequest.transactionHash && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -420,35 +430,35 @@ export default function BorrowerLoanStatus() {
                             {selectedRequest.transactionHash}
                           </a>
                         </div>
-                        
+
                         {selectedRequest.blockNumber && (
                           <div className="flex justify-between">
                             <span className="text-blue-700 font-medium">Block Number:</span>
                             <span className="text-blue-800 font-mono">{selectedRequest.blockNumber}</span>
                           </div>
                         )}
-                        
+
                         {selectedRequest.ethAmount && (
                           <div className="flex justify-between">
                             <span className="text-blue-700 font-medium">Amount Funded:</span>
                             <span className="text-blue-800 font-semibold">{selectedRequest.ethAmount} ETH</span>
                           </div>
                         )}
-                        
+
                         {selectedRequest.lenderAddress && (
                           <div>
                             <p className="text-blue-700 font-medium">Lender Address:</p>
                             <p className="text-blue-800 font-mono text-xs break-all">{selectedRequest.lenderAddress}</p>
                           </div>
                         )}
-                        
+
                         {selectedRequest.borrowerAddress && (
                           <div>
                             <p className="text-blue-700 font-medium">Your Wallet:</p>
                             <p className="text-blue-800 font-mono text-xs break-all">{selectedRequest.borrowerAddress}</p>
                           </div>
                         )}
-                        
+
                         <div className="pt-2 border-t border-blue-200">
                           <a
                             href={`https://etherscan.io/tx/${selectedRequest.transactionHash}`}
@@ -463,7 +473,7 @@ export default function BorrowerLoanStatus() {
                       </div>
                     </div>
                   )}
-                  
+
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="text-2xl font-bold text-slate-800">{selectedRequest.loanType} </h3>
@@ -471,7 +481,7 @@ export default function BorrowerLoanStatus() {
                     </div>
                     {getStatusBadge(selectedRequest.status)}
                   </div>
-                  
+
                   <div className="border-t border-slate-200 pt-4 mb-4">
                     <h4 className="text-sm font-semibold text-slate-700 mb-3">Loan Details</h4>
                     <div className="space-y-3">
@@ -489,12 +499,12 @@ export default function BorrowerLoanStatus() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="border-t border-slate-200 pt-4 mb-4">
                     <h4 className="text-sm font-semibold text-slate-700 mb-2">Loan Purpose</h4>
                     <p className="text-sm text-slate-600">{selectedRequest.loanPurpose}</p>
                   </div>
-                  
+
                   <div className="border-t border-slate-200 pt-4 mb-4">
                     <h4 className="text-sm font-semibold text-slate-700 mb-3">Your Credit Score</h4>
                     <div className={`text-center py-4 rounded-lg ${getScoreColor(selectedRequest.creditScore)}`}>
@@ -502,7 +512,7 @@ export default function BorrowerLoanStatus() {
                       <div className="text-sm font-semibold mt-1">{selectedRequest.creditBand}</div>
                     </div>
                   </div>
-                  
+
                   {Array.isArray(selectedRequest.reasons) && selectedRequest.reasons.length > 0 && (
                     <div className="border-t border-slate-200 pt-4">
                       <h4 className="text-sm font-semibold text-slate-700 mb-3">Credit Factors Considered</h4>
