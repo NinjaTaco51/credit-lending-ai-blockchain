@@ -22,33 +22,63 @@ export default function LoanRequestPage() {
   });
   
   useEffect(() => {
-    const email = localStorage.getItem('userEmail');
-    if (!email) {
-      window.location.href = "/";
-      return;
-    }
-    setUserEmail(email);
-    
-    // Fetch user data and credit score from Supabase
-    const fetchUserData = async () => {
+    const init = async () => {
+      // 1) Get logged-in user from Supabase Auth
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error('Error getting user:', userError);
+        window.location.href = '/';
+        return;
+      }
+
+      if (!user) {
+        // Not logged in → go back to landing/login
+        window.location.href = '/';
+        return;
+      }
+
+      const email = user.email;
+      setUserEmail(email);
+
+      // 2) Fetch user data (and type) from Account table
       const { data, error } = await supabase
         .from('Account')
-        .select('name, credit_score, credit_reasons')
+        .select('name, credit_score, credit_reasons, type')
         .eq('email', email)
         .maybeSingle();
-      
-      if (data) {
-        setUserName(data.name || 'User');
-        if (data.credit_score) {
-          setUserCreditScore(data.credit_score);
-          setCreditBand(getCreditBand(data.credit_score));
-          setHasCreditScore(true);
-          setCreditReasons(data.credit_reasons || []);
-        }
+
+      if (error) {
+        console.error('Prefill error:', error);
+        return;
+      }
+
+      if (!data) {
+        console.log('No Account row for this user yet');
+        return;
+      }
+
+      // Enforce borrower-only access to this page
+      if (data.type && data.type !== 'borrower') {
+        alert('This page is only available to borrower accounts.');
+        window.location.href = '/';
+        return;
+      }
+
+      setUserName(data.name || 'User');
+
+      if (data.credit_score != null) {
+        setUserCreditScore(data.credit_score);
+        setCreditBand(getCreditBand(data.credit_score));
+        setHasCreditScore(true);
+        setCreditReasons(data.credit_reasons || []);
       }
     };
-    
-    fetchUserData();
+
+    init();
   }, []);
   
   const getCreditBand = (score) => {
@@ -69,11 +99,11 @@ export default function LoanRequestPage() {
   
   const getLoanTypeLabel = (type) => {
     const labels = {
-      'personal': 'Personal Loan',
-      'home': 'Home Loan',
-      'auto': 'Auto Loan',
-      'student': 'Student Loan',
-      'business': 'Business Loan'
+      personal: 'Personal Loan',
+      home: 'Home Loan',
+      auto: 'Auto Loan',
+      student: 'Student Loan',
+      business: 'Business Loan',
     };
     return labels[type] || type;
   };
@@ -84,6 +114,11 @@ export default function LoanRequestPage() {
       return;
     }
     
+    if (!userEmail) {
+      alert('You must be logged in to submit a loan request.');
+      return;
+    }
+
     setIsLoading(true);
     
     try {
@@ -104,7 +139,7 @@ export default function LoanRequestPage() {
           credit_band: creditBand,
           reasons: creditReasons,
           request_date: requestDate,
-          status: 'pending'
+          status: 'pending',
         })
         .select()
         .single();
@@ -122,7 +157,7 @@ export default function LoanRequestPage() {
           loanType: '',
           loanAmount: '',
           loanPurpose: '',
-          loanTerm: ''
+          loanTerm: '',
         });
       }
     } catch (error) {
@@ -134,10 +169,10 @@ export default function LoanRequestPage() {
   };
   
   const navItems = [
-    { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: CreditCard, label: 'Credit Score', href: '/borrower/credit-score' },
     { icon: DollarSign, label: 'Loan Dashboard', href: '/borrower/loans' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
-    { icon: LogOut, label: 'Logout', href: '/logout'}
+    { icon: LogOut, label: 'Logout', href: '/logout' },
   ];
   
   const loanTypes = [
@@ -145,7 +180,7 @@ export default function LoanRequestPage() {
     { value: 'home', label: 'Home/Mortgage Loan', icon: Home },
     { value: 'auto', label: 'Auto Loan', icon: Car },
     { value: 'student', label: 'Student Loan', icon: GraduationCap },
-    { value: 'business', label: 'Business Loan', icon: Briefcase }
+    { value: 'business', label: 'Business Loan', icon: Briefcase },
   ];
   
   return (
@@ -260,12 +295,16 @@ export default function LoanRequestPage() {
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      <type.icon className={`w-6 h-6 mr-3 ${
-                        loanRequest.loanType === type.value ? 'text-blue-600' : 'text-slate-400'
-                      }`} />
-                      <span className={`font-medium ${
-                        loanRequest.loanType === type.value ? 'text-blue-900' : 'text-slate-700'
-                      }`}>
+                      <type.icon
+                        className={`w-6 h-6 mr-3 ${
+                          loanRequest.loanType === type.value ? 'text-blue-600' : 'text-slate-400'
+                        }`}
+                      />
+                      <span
+                        className={`font-medium ${
+                          loanRequest.loanType === type.value ? 'text-blue-900' : 'text-slate-700'
+                        }`}
+                      >
                         {type.label}
                       </span>
                     </button>
