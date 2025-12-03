@@ -51,42 +51,6 @@ export default function EditProfilePage() {
     return false;
   }
 
-  useEffect(() => {
-    checkIfWalletIsConnected();
-    loadUserWalletFromBackend();
-  }, []);
-
-  // Load user's saved wallet address from backend
-  const loadUserWalletFromBackend = async () => {
-    try {
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
-        console.warn('No userEmail in localStorage');
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('Account')
-        .select('wallet_address')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error loading wallet from Supabase:', error);
-        return;
-      }
-
-      if (data && data.wallet_address) {
-        setWalletAddress(data.wallet_address);
-        console.log('Wallet loaded from Supabase:', data.wallet_address);
-      } else {
-        console.log('No wallet saved for this lender yet');
-      }
-    } catch (error) {
-      console.error('Error loading wallet address:', error);
-    }
-  };
-
   // Check if MetaMask is installed and wallet is already connected
   const checkIfWalletIsConnected = async () => {
     try {
@@ -98,6 +62,46 @@ export default function EditProfilePage() {
       }
     } catch (error) {
       console.error('Error checking wallet connection:', error);
+    }
+  };
+
+  // Save wallet address to backend using Supabase Auth
+  const saveWalletToBackend = async (address) => {
+    setIsSavingWallet(true);
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        console.error('No authenticated user');
+        setWalletError('You must be logged in to save your wallet.');
+        return;
+      }
+
+      const email = user.email;
+
+      const { data, error } = await supabase
+        .from('Account')
+        .update({ wallet_address: address })
+        .eq('email', email);
+
+      console.log('Supabase update result:', { data, error });
+
+      if (error) {
+        console.error('Supabase error saving wallet:', error);
+        setWalletError(`Supabase error: ${error.message || 'Unknown error'}`);
+        return;
+      }
+
+      console.log('Wallet saved successfully to Supabase');
+      setWalletError(''); // clear any old errors
+    } catch (error) {
+      console.error('Unexpected error saving wallet:', error);
+      setWalletError(`Unexpected error: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsSavingWallet(false);
     }
   };
 
@@ -156,50 +160,23 @@ export default function EditProfilePage() {
     }
   };
 
-  // Save wallet address to backend
-  const saveWalletToBackend = async (address) => {
-    setIsSavingWallet(true);
-    try {
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
-        console.error('❌ No user email in localStorage');
-        setWalletError('No user email found in localStorage. Are you logged in?');
-        return; // don't throw; just stop here
-      }
-
-      const { data, error } = await supabase
-        .from('Account')
-        .update({ wallet_address: address })
-        .eq('email', email);
-
-      console.log('Supabase update result:', { data, error });
-
-      if (error) {
-        console.error('❌ Supabase error saving wallet:', error);
-        setWalletError(`Supabase error: ${error.message || 'Unknown error'}`);
-        return;
-      }
-
-      console.log('✅ Wallet saved successfully to Supabase');
-      setWalletError(''); // clear any old errors
-    } catch (error) {
-      console.error('❌ Unexpected error saving wallet:', error);
-      setWalletError(`Unexpected error: ${error.message || 'Unknown error'}`);
-    } finally {
-      setIsSavingWallet(false);
-    }
-  };
-
-
-  // Disconnect wallet
+  // Disconnect wallet (clear in DB for logged-in user)
   const disconnectWallet = async () => {
     try {
       console.log('Disconnecting wallet...');
 
-      const email = localStorage.getItem('userEmail');
-      if (!email) {
-        throw new Error('No user email in localStorage');
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        console.error('No authenticated user');
+        setWalletError('You must be logged in to disconnect your wallet.');
+        return;
       }
+
+      const email = user.email;
 
       const { error } = await supabase
         .from('Account')
@@ -251,13 +228,16 @@ export default function EditProfilePage() {
     };
   }, [walletAddress]);
 
-  // Format wallet address for display
+  // Format wallet address for display (currently not used but kept)
   const formatAddress = (address) => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
   
+  // Initial load: auth check, lender-only guard, prefill profile + wallet, check wallet availability
   useEffect(() => {
     const fetchAndPrefill = async () => {
+      await checkIfWalletIsConnected();
+
       const {
         data: { user },
         error: userError,
@@ -272,21 +252,37 @@ export default function EditProfilePage() {
 
       const email = user.email;
 
-      const { data, error } = await supabase
+      // Fetch account & enforce lender-only access
+      const { data: account, error: accountError } = await supabase
         .from("Account")
-        .select("name, email")
+        .select("type, name, email, wallet_address")
         .eq("email", email)
         .maybeSingle();
 
-      if (error || !data) {
-        console.error("Prefill error:", error);
+      if (accountError || !account) {
+        console.error("Prefill error:", accountError);
+        return;
+      }
+
+      if (account.type !== 'lender') {
+        alert('This page is only available to lender accounts.');
+        if (typeof window !== 'undefined') {
+          window.location.href = "/";
+        }
         return;
       }
 
       setProfileData({
-        name: data.name || "",
-        email: data.email || "",
+        name: account.name || "",
+        email: account.email || "",
       });
+
+      if (account.wallet_address) {
+        setWalletAddress(account.wallet_address);
+        console.log('Wallet loaded from Supabase:', account.wallet_address);
+      } else {
+        console.log('No wallet saved for this lender yet');
+      }
     };
 
     fetchAndPrefill();
@@ -331,11 +327,6 @@ export default function EditProfilePage() {
     // Validate profile fields
     if (!profileData.name || !profileData.email) {
       alert("Please Fill in All Fields in Personal Information");
-      return;
-    }
-
-    if (!profileData.fullName || !profileData.email || !profileData.phone || !profileData.dob) {
-      alert('Please Fill in All Fields in Personal Information');
       return;
     }
 
@@ -397,13 +388,21 @@ export default function EditProfilePage() {
     const { data: update, error: updateError } = await supabase
       .from('Account')
       .update({
-        name: profileData.fullName,
+        name: profileData.name,
         email: profileData.email,
-        phone: profileData.phone,
-        dob: profileData.dob,
+        // phone and dob are not in the form currently; keep here if you add inputs later:
+        // phone: profileData.phone,
+        // dob: profileData.dob,
       })
       .eq('email', email)
       .maybeSingle();
+
+    if (updateError) {
+      console.error('Profile update error:', updateError);
+      alert('Failed to update profile. Please try again.');
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(false);
 

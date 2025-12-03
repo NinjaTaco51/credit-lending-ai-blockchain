@@ -12,17 +12,62 @@ export default function BorrowerPaymentDashboard() {
   const [borrowerEmail, setBorrowerEmail] = useState('');
 
   useEffect(() => {
-    const email = localStorage.getItem('userEmail');
-    if (!email) {
-      console.log('No user email found, redirecting to home.');
-      window.location.href = "/";
-      return;
-    }
+    const init = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
 
-    console.log('Borrower email:[' + email + ']');
-    setBorrowerEmail(email);
+        // 1) Get authenticated user
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-    fetchBorrowerData(email);
+        if (userError || !user) {
+          console.error('Error getting user:', userError);
+          setError("You must be logged in to view your loan payments.");
+          if (typeof window !== "undefined") {
+            window.location.href = "/";
+          }
+          return;
+        }
+
+        const email = user.email;
+        console.log('Borrower email:[' + email + ']');
+
+        // 2) Verify user is a borrower
+        const { data: account, error: accountError } = await supabase
+          .from('Account')
+          .select('type')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (accountError) {
+          console.error('Error loading account:', accountError);
+          setError('Failed to load your account information.');
+          setIsLoading(false);
+          return;
+        }
+
+        if (!account || account.type !== 'borrower') {
+          alert('This page is only available to borrower accounts.');
+          if (typeof window !== 'undefined') {
+            window.location.href = '/';
+          }
+          return;
+        }
+
+        // 3) All good → set email and load data
+        setBorrowerEmail(email);
+        fetchBorrowerData(email);
+      } catch (err) {
+        console.error('Error initializing borrower payment dashboard:', err);
+        setError('Failed to load borrower information.');
+        setIsLoading(false);
+      }
+    };
+
+    init();
   }, []);
 
   const fetchBorrowerData = async (email) => {
@@ -30,7 +75,7 @@ export default function BorrowerPaymentDashboard() {
       setIsLoading(true);
       setError(null);
 
-      // Get approved loans (in production, filter by current user)
+      // Get approved loans for this borrower
       const { data: loansData, error: loansError } = await supabase
         .from('loan_requests')
         .select('*')

@@ -185,7 +185,7 @@ export default function Dashboard() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Get logged-in user from Supabase Auth instead of localStorage
+    // Get logged-in user from Supabase Auth
     const {
       data: { user },
       error: userError,

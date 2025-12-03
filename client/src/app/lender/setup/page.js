@@ -24,7 +24,7 @@ export default function SetPasswordPage() {
     hasNumber: false
   });
 
-  // Get lender from Supabase Auth instead of localStorage
+  // Get lender from Supabase Auth
   useEffect(() => {
     const init = async () => {
       const {

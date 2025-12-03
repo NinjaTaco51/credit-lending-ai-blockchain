@@ -25,14 +25,60 @@ export default function LenderPaymentStatus() {
   });
 
   useEffect(() => {
-    const email = localStorage.getItem('userEmail');
-    if (!email) {
-      window.location.href = "/";
-      return;
-    }
-    setLenderEmail(email);
+    const init = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
 
-    fetchPaymentStatus(email);
+        // Get authenticated user from Supabase
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          console.error('Error getting user:', userError);
+          setError("You must be logged in to view payment status.");
+          if (typeof window !== "undefined") {
+            window.location.href = "/";
+          }
+          return;
+        }
+
+        const email = user.email;
+
+        // Enforce lender-only access
+        const { data: account, error: accountError } = await supabase
+          .from('Account')
+          .select('type')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (accountError) {
+          console.error('Error loading account:', accountError);
+          setError('Failed to load your account information.');
+          setIsLoading(false);
+          return;
+        }
+
+        if (!account || account.type !== 'lender') {
+          alert('This page is only available to lender accounts.');
+          if (typeof window !== 'undefined') {
+            window.location.href = '/';
+          }
+          return;
+        }
+
+        setLenderEmail(email);
+        fetchPaymentStatus(email);
+      } catch (err) {
+        console.error('Error initializing lender payment dashboard:', err);
+        setError('Failed to load lender information.');
+        setIsLoading(false);
+      }
+    };
+
+    init();
   }, []);
 
   const fetchPaymentStatus = async (email) => {
