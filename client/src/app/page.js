@@ -457,6 +457,20 @@ export default function AuthPages() {
                     </p>
                   </div>
                 )}
+                {/* Lender Application Link - Only for Lenders */}
+                {userType === 'lender' && (
+                  <div className="text-center pt-4 border-t border-slate-200">
+                    <p className="text-sm text-slate-600">
+                      Want to become a lender?{' '}
+                      <a
+                        href="/lender/apply"
+                        className="text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Apply for a lender account
+                      </a>
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
