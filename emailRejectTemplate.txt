@@ -1,0 +1,23 @@
+(send if their application is rejected)
+
+Subject: Update on Your Lender Application — CreditView
+
+Body:
+
+Hello {{name}},
+
+Thank you for your interest in becoming a lender on CreditView.
+After reviewing your application, we are unable to approve it at this time.
+
+This decision may be due to:
+
+Incomplete or unverifiable information
+
+Requirements that do not fully align with our lending criteria
+
+If you believe this was made in error or if you’d like to provide additional information, feel free to reply to this email.
+
+We appreciate your interest and wish you all the best.
+
+Sincerely,
+CreditView Team
