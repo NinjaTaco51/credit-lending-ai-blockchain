@@ -7,19 +7,19 @@ import supabase from "../config/supabaseClient"
 
 export default function AuthPages() {
   const [userType, setUserType] = useState('borrower'); // 'borrower' or 'lender'
-  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup' (borrower only)
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
-  useEffect(() => {
-  }, []);
-  
+
+  // Lender application mode
+  const [lenderAppMode, setLenderAppMode] = useState(false);
+
   const [loginData, setLoginData] = useState({
     email: '',
     password: ''
   });
-  
+
   const [signupData, setSignupData] = useState({
     fullName: '',
     email: '',
@@ -27,6 +27,17 @@ export default function AuthPages() {
     dob: '',
     password: '',
     confirmPassword: '',
+  });
+
+  // Lender application form data
+  const [lenderAppData, setLenderAppData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    company: '',
+    experience: '',
+    typicalLoanSize: '',
+    notes: '',
   });
 
   function isValidEmail(email) {
@@ -60,7 +71,7 @@ export default function AuthPages() {
     }
     return false;
   }
-  
+
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
     setLoginData({
@@ -68,7 +79,7 @@ export default function AuthPages() {
       [name]: value
     });
   };
-  
+
   const handleSignupChange = (e) => {
     const { name, value } = e.target;
     setSignupData({
@@ -76,7 +87,15 @@ export default function AuthPages() {
       [name]: value
     });
   };
-  
+
+  const handleLenderAppChange = (e) => {
+    const { name, value } = e.target;
+    setLenderAppData({
+      ...lenderAppData,
+      [name]: value
+    });
+  };
+
   const handleLoginSubmit = async () => {
     setIsLoading(true);
 
@@ -112,7 +131,6 @@ export default function AuthPages() {
 
       // ENFORCE CORRECT PORTAL
       if (userTypeFromDb !== userType) {
-        // userType is the selected portal in your UI
         await supabase.auth.signOut();
         alert(
           `This account is registered as a ${userTypeFromDb}. Please log in through the ${userTypeFromDb === 'borrower' ? 'Borrower' : 'Lender'} portal.`
@@ -229,7 +247,7 @@ export default function AuthPages() {
 
     return age >= 18;
   }
-  
+
   const handleSignupSubmit = async () => {
     if (
       !signupData.email ||
@@ -294,8 +312,7 @@ export default function AuthPages() {
           name: signupData.fullName,
           phone: signupData.phone,
           dob: signupData.dob,
-          type: userType, // 'borrower' or 'lender'
-          // no password_hash needed anymore
+          type: userType, // 'borrower'
         },
       ]);
 
@@ -310,10 +327,75 @@ export default function AuthPages() {
     setAuthMode("login");
     alert("Account created! Please log in.");
   };
-  
+
+  const handleLenderApplicationSubmit = async () => {
+    if (!lenderAppData.name || !lenderAppData.email) {
+      alert("Please fill in at least your name and email.");
+      return;
+    }
+
+    if (!isValidEmail(lenderAppData.email)) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    if (lenderAppData.phone && !isValidPhone(lenderAppData.phone)) {
+      alert("Please enter a valid 10-digit phone number (no dashes).");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('lender_applications')
+        .insert([
+          {
+            name: lenderAppData.name,
+            email: lenderAppData.email,
+            phone: lenderAppData.phone || null,
+            company: lenderAppData.company || null,
+            experience: lenderAppData.experience || null,
+            typical_loan_size: lenderAppData.typicalLoanSize || null,
+            notes: lenderAppData.notes || null,
+            status: 'pending',
+          }
+        ]);
+
+      if (error) {
+        console.error('Error submitting lender application:', error);
+        if (error.code === '23505') {
+          alert("You already have a pending lender application with this email.");
+        } else {
+          alert(error.message || "Failed to submit lender application.");
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      alert("Your lender application has been submitted! Our team will review it and contact you by email.");
+      setLenderAppData({
+        name: '',
+        email: '',
+        phone: '',
+        company: '',
+        experience: '',
+        typicalLoanSize: '',
+        notes: '',
+      });
+      setLenderAppMode(false);
+    } catch (err) {
+      console.error('Unexpected error submitting lender application:', err);
+      alert("Unexpected error submitting application.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const switchUserType = (type) => {
     setUserType(type);
     setAuthMode('login');
+    setLenderAppMode(false);
     setLoginData({ email: '', password: '' });
     setSignupData({
       fullName: '',
@@ -325,8 +407,17 @@ export default function AuthPages() {
       companyName: '',
       businessId: ''
     });
+    setLenderAppData({
+      name: '',
+      email: '',
+      phone: '',
+      company: '',
+      experience: '',
+      typicalLoanSize: '',
+      notes: '',
+    });
   };
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Navigation Bar */}
@@ -369,8 +460,157 @@ export default function AuthPages() {
       
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {authMode === 'login' || userType === 'lender' ? (
-          // LOGIN PAGE
+        {/* LENDER APPLICATION MODE */}
+        {userType === 'lender' && lenderAppMode ? (
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
+                <Building2 className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-3xl font-bold text-slate-800 mb-2">
+                Lender Application
+              </h2>
+              <p className="text-slate-600">
+                Apply to become a lender on CreditView. Our team will review your application and contact you by email.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Full Name <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      <input
+                        type="text"
+                        name="name"
+                        value={lenderAppData.name}
+                        onChange={handleLenderAppChange}
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                        placeholder="Jane Smith"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Email Address <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      <input
+                        type="email"
+                        name="email"
+                        value={lenderAppData.email}
+                        onChange={handleLenderAppChange}
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                        placeholder="jane@example.com"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Phone Number
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={lenderAppData.phone}
+                        onChange={handleLenderAppChange}
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                        placeholder="5551234567"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Company */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Company / Institution
+                    </label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                      <input
+                        type="text"
+                        name="company"
+                        value={lenderAppData.company}
+                        onChange={handleLenderAppChange}
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                        placeholder="Acme Lending Corp."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Experience */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Lending Experience (optional)
+                  </label>
+                  <textarea
+                    name="experience"
+                    value={lenderAppData.experience}
+                    onChange={handleLenderAppChange}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                    rows={3}
+                    placeholder="Tell us about your background in lending or investing..."
+                  />
+                </div>
+
+                {/* Typical Loan Size */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Typical Loan Size (optional)
+                  </label>
+                  <input
+                    type="text"
+                    name="typicalLoanSize"
+                    value={lenderAppData.typicalLoanSize}
+                    onChange={handleLenderAppChange}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                    placeholder="$5,000 - $25,000"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Additional Notes (optional)
+                  </label>
+                  <textarea
+                    name="notes"
+                    value={lenderAppData.notes}
+                    onChange={handleLenderAppChange}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:opacity-100"
+                    rows={3}
+                    placeholder="Anything else we should know?"
+                  />
+                </div>
+
+                {/* Submit + Back */}
+                <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                  <button
+                    onClick={handleLenderApplicationSubmit}
+                    disabled={isLoading}
+                    className="flex-1 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? 'Submitting Application...' : 'Submit Application'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : authMode === 'login' || userType === 'lender' ? (
+          // LOGIN PAGE (Borrower + Lender)
           <div className="max-w-md mx-auto">
             <div className="text-center mb-6">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
@@ -442,9 +682,9 @@ export default function AuthPages() {
                   {isLoading ? 'Signing in...' : 'Sign In'}
                 </button>
                 
-                {/* Sign Up Link - Only for Borrowers */}
-                {userType === 'borrower' && (
-                  <div className="text-center pt-4 border-t border-slate-200">
+                {/* Borrower sign-up & Lender apply links */}
+                <div className="text-center pt-4 border-t border-slate-200 space-y-2">
+                  {userType === 'borrower' && (
                     <p className="text-sm text-slate-600">
                       Don't have an account?{' '}
                       <button
@@ -455,8 +695,21 @@ export default function AuthPages() {
                         Sign up
                       </button>
                     </p>
-                  </div>
-                )}
+                  )}
+
+                  {userType === 'lender' && (
+                    <p className="text-sm text-slate-600">
+                      Want to become a lender?{' '}
+                      <button
+                        type="button"
+                        onClick={() => setLenderAppMode(true)}
+                        className="text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Apply for a lender account
+                      </button>
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
