@@ -45,7 +45,7 @@
         },
     };
 
-    # Create .env file with contents:
+    In /loandesk Create .env file with contents:
     SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/(your metamask private key for etherum)
     PRIVATE_KEY=(your metamask private key for etherum)
     LENDER_ADDRESS=(your account address)

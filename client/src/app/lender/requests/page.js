@@ -47,8 +47,10 @@ export default function BorrowerDashboard() {
         return;
       }
 
+      setLenderEmail(user.email);
+
       // Check if lender has wallet connected
-      checkLenderWallet(email);
+      checkLenderWallet(user.email);
       fetchTotalLoanRequests();
       fetchLoanRequests();
     };
