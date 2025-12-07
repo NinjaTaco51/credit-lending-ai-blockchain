@@ -16,7 +16,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Hardhat
-artifacts/
+loandesk/artifacts/
 cache/
 typechain/
 typechain-types/
