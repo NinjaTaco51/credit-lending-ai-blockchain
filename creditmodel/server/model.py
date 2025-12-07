@@ -604,113 +604,55 @@ class MLP(nn.Module):
 
 import joblib
 
-MODEL_STATE_PATH   = os.path.join(ART_DIR, "model_state.pt")
-OHE_PATH           = os.path.join(ART_DIR, "ohe.joblib")
-SCALER_PATH        = os.path.join(ART_DIR, "scaler.joblib")
-CLASS_NAMES_PATH   = os.path.join(ART_DIR, "class_names.json")
-NUM_COLS_PATH      = os.path.join(ART_DIR, "num_cols.json")
-CAT_COLS_PATH      = os.path.join(ART_DIR, "cat_cols.json")
+BUNDLE_PATH = os.path.join(ART_DIR, "model_bundle.pkl")
 
-
-def save_artifacts(model, ohe, scaler, num_cols, cat_cols):
+def save_pickle_bundle(model, ohe, scaler, num_cols, cat_cols):
     """
-    Save model weights + preprocessors + column metadata.
-    Call this AFTER training is complete (in the __main__ block).
+    Optional: store everything in one pickle file.
     """
-    # 1) model weights
-    torch.save(model.state_dict(), MODEL_STATE_PATH)
+    bundle = {
+        "state_dict": model.state_dict(),
+        "class_names": CLASS_NAMES,
+        "num_cols": list(num_cols),
+        "cat_cols": list(cat_cols),
+        "ohe": ohe,
+        "scaler": scaler,
+    }
+    with open(BUNDLE_PATH, "wb") as f:
+        pickle.dump(bundle, f)
 
-    # 2) preprocessors
-    joblib.dump(ohe, OHE_PATH)
-    joblib.dump(scaler, SCALER_PATH)
+    print("✔ Saved full model bundle to", BUNDLE_PATH)
 
-    # 3) metadata
-    with open(CLASS_NAMES_PATH, "w") as f:
-        json.dump(CLASS_NAMES, f)
-
-    with open(NUM_COLS_PATH, "w") as f:
-        json.dump(list(num_cols), f)
-
-    with open(CAT_COLS_PATH, "w") as f:
-        json.dump(list(cat_cols), f)
-
-    print("✔ Saved model + preprocessors + column metadata to 'artifacts/'.")
-
-
-def load_artifacts(device: str = "cpu"):
+def load_pickle_bundle(device: str = "cpu"):
     """
-    Load saved model + preprocessors.
-    Call this ONCE at API startup (e.g., in app.py @app.on_event('startup')).
+    Alternative to load_artifacts(): load everything from a single pickle file.
     """
     global model, ohe, scaler, CLASS_NAMES, NUM_COLS_FIT, CAT_COLS_FIT
 
-    # 1) preprocessors
-    ohe = joblib.load(OHE_PATH)
-    scaler = joblib.load(SCALER_PATH)
+    with open(BUNDLE_PATH, "rb") as f:
+        bundle = pickle.load(f)
 
-    # 2) metadata
-    with open(CLASS_NAMES_PATH, "r") as f:
-        CLASS_NAMES = json.load(f)
+    CLASS_NAMES  = bundle["class_names"]
+    NUM_COLS_FIT = bundle["num_cols"]
+    CAT_COLS_FIT = bundle["cat_cols"]
+    ohe          = bundle["ohe"]
+    scaler       = bundle["scaler"]
 
-    with open(NUM_COLS_PATH, "r") as f:
-        NUM_COLS_FIT = json.load(f)
-
-    with open(CAT_COLS_PATH, "r") as f:
-        CAT_COLS_FIT = json.load(f)
-
-    # 3) rebuild model with correct input dimension
-    #    in_dim = number of numeric features + number of OHE output columns
+    # rebuild model
     try:
         ohe_feature_count = len(ohe.get_feature_names_out())
     except Exception:
-        # Very old sklearn fallback (shouldn't be needed, but just in case)
         ohe_feature_count = ohe.transform(
             pd.DataFrame({c: ["DUMMY"] for c in CAT_COLS_FIT})
         ).shape[1]
 
     in_dim = len(NUM_COLS_FIT) + ohe_feature_count
-
     model = MLP(in_dim=in_dim, n_classes=len(CLASS_NAMES))
-    state = torch.load(MODEL_STATE_PATH, map_location=device)
-    model.load_state_dict(state)
+    model.load_state_dict(bundle["state_dict"])
+    model.to(device)
     model.eval()
 
-    print("✔ Loaded pretrained model + preprocessors from 'artifacts/'.")
-
-if __name__ == "__main__":
-    # ───────────────── TRAIN PREP (dynamic, one-time) ─────────────────
-    # We already built: ohe, scaler, NUM_COLS_FIT, CAT_COLS_FIT, X_train, X_test
-    model = MLP(in_dim=X_train.shape[1], n_classes=len(CLASS_NAMES))
-
-    # Class weights to handle imbalance
-    counts = Counter(y_tr)  # {0: #Poor, 1: #Standard, 2: #Good}
-    total = sum(counts.values())
-    weights = torch.tensor(
-        [total / counts.get(i, 1) for i in range(len(CLASS_NAMES))],
-        dtype=torch.float32
-    )
-    criterion = nn.CrossEntropyLoss(weight=weights)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
-
-    model.train()
-    for _ in range(30):
-        for xb, yb in train_loader:
-            logits = model(xb)
-            loss = criterion(logits, yb)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-    model.eval()
-    if yte is not None:
-        with torch.no_grad():
-            preds = torch.argmax(model(Xte), dim=1).cpu().numpy()
-        print("Test accuracy:", accuracy_score(yte, preds))
-    else:
-        print("Test set has no labels; skipping accuracy.")
-
-    # Save everything needed for inference
-    save_artifacts(model, ohe, scaler, NUM_COLS_FIT, CAT_COLS_FIT)
+    print("✔ Loaded full model bundle from", BUNDLE_PATH)
 
 # ───────────────── EXPLANATION (optional via Captum) ─────────────────
 def try_import_captum():
@@ -1002,56 +944,13 @@ def predict_with_reasons_df(df: pd.DataFrame):
     # 2. CHECK: If the model is empty, load it now!
     if model is None:
         print("⚠️ Model not found in memory. Loading artifacts now...")
-        load_artifacts()
+        load_pickle_bundle()
     
     # 3. Proceed with prediction
     x = transform_df_for_model(df)
     with torch.no_grad():
         logits = model(x)  # Now this will work because model is loaded
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
-
-    # ... (Keep the rest of your existing function code below this unchanged) ...
-    # Raw NN view
-    top_idx = int(np.argmax(probs))
-    nn_decision = CLASS_NAMES[top_idx]
-    confidence = float(probs[top_idx]) * 100.0
-    p_nn_poor = float(probs[CLASS_NAMES.index("Poor")])
-    
-    # ... (ensure you keep the rest of the logic down to the return statement)
-    
-    p_rule_poor = rule_risk_from_df(df)
-    p_poor = float(p_nn_poor + p_rule_poor - (p_nn_poor * p_rule_poor))
-    p_poor = max(0.0, min(1.0, p_poor))
-
-    credit_score = probability_to_score(p_poor, method="linear")
-    band = score_band(credit_score)
-
-    if band in {"Poor"}:
-        decision = "Poor"
-    elif band in {"Fair"}:
-        decision = "Standard"
-    else:
-        decision = "Good" if nn_decision == "Good" and band in {"Very Good","Excellent"} else "Standard"
-
-    icon = "⚠️" if band in {"Poor","Fair"} else ("✅" if band in {"Very Good","Excellent"} else "⚖️")
-    message = f"{icon} Score {credit_score:.0f} ({band}). Confidence {confidence:.1f}%."
-
-    reasons = []
-    need_reasons = (band in {"Poor","Fair"}) or (p_poor >= 0.5)
-    if need_reasons:
-        # (Your existing reason logic here...)
-        reasons = fallback_reasons_dynamic(df, top_k=4)
-
-    return {
-        "decision": decision,
-        "confidence": round(confidence, 1),
-        "probabilities": {k: float(v) for k, v in zip(CLASS_NAMES, probs)},
-        "risk_probability": round(p_poor, 6),
-        "credit_score": round(credit_score, 0),
-        "band": band,
-        "message": message,
-        "reasons": reasons,
-    }
 
     # Raw NN view (still useful to return and to gate Captum)
     top_idx = int(np.argmax(probs))
@@ -1144,7 +1043,7 @@ if __name__ == "__main__":
             # We redirect stdout temporarily to stop "Loaded model" prints from messing up JSON
             original_stdout = sys.stdout
             sys.stdout = open(os.devnull, 'w') 
-            load_artifacts()
+            load_pickle_bundle()
             sys.stdout = original_stdout # Restore print capability
 
             # 2. Parse Input
@@ -1194,4 +1093,4 @@ if __name__ == "__main__":
                 preds = torch.argmax(model(Xte), dim=1).cpu().numpy()
             print("Test accuracy:", accuracy_score(yte, preds))
 
-        save_artifacts(model, ohe, scaler, NUM_COLS_FIT, CAT_COLS_FIT)
+        save_pickle_bundle(model, ohe, scaler, NUM_COLS_FIT, CAT_COLS_FIT)

@@ -1,2 +1,0 @@
-Link to spreadsheet for SHAP reason codes:
-https://docs.google.com/spreadsheets/d/1g2bCgj1WFzIaptfOhS9OfKfKo37wCE7fI1Hd0A1HiGs/edit?usp=sharing
