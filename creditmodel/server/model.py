@@ -654,6 +654,13 @@ def load_pickle_bundle(device: str = "cpu"):
 
     print("✔ Loaded full model bundle from", BUNDLE_PATH)
 
+def load_artifacts(device: str = "cpu"):
+    """
+    Thin wrapper used by the FastAPI/Flask servers.
+    Just load the pre-trained bundle into global variables.
+    """
+    load_pickle_bundle(device=device)
+
 # ───────────────── EXPLANATION (optional via Captum) ─────────────────
 def try_import_captum():
     try:
