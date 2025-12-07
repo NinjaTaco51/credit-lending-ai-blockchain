@@ -8,7 +8,7 @@ from typing import List, Optional
 import uvicorn
 
 # Import the in-memory model pipeline
-from .model import predict_from_user_payload, load_artifacts
+from .model import predict_from_user_payload, load_pickle_bundle
 
 app = FastAPI(title="Credit Scoring API", version="1.0")
 
@@ -24,7 +24,7 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     # Load pretrained model + preprocessors into memory
-    load_artifacts()
+    load_pickle_bundle()
 
 # ----- Schema expected from React form -----
 class ScoreRequest(BaseModel):

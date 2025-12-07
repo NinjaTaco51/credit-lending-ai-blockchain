@@ -227,45 +227,364 @@ def loan_flags_from_series(type_of_loan_series: pd.Series) -> pd.DataFrame:
     out["eng_risky_loan_count"] = counts_risky
     return out
 
-# ───────────────── TRAIN / TEST METADATA FOR INFERENCE ─────────────────
-TARGET_COL = "Credit_Score"
+# ───────────────── LOAD TRAIN / TEST CSV (use CSV headers directly) ─────────────────
+TRAIN_CSV = "../creditmodel/input/train.csv"
+TEST_CSV  = "../creditmodel/input/test.csv"
+TARGET_COL = "Credit_Score"  # train.csv last column
 
-TRAIN_COLUMNS = [
-    'ID', 
-    'Customer_ID', 
-    'Month', 
-    'Name', 
-    'Age', 
-    'SSN', 
-    'Occupation', 
-    'Annual_Income', 
-    'Monthly_Inhand_Salary', 
-    'Num_Bank_Accounts', 
-    'Num_Credit_Card', 
-    'Interest_Rate', 
-    'Num_of_Loan', 
-    'Type_of_Loan', 
-    'Delay_from_due_date', 
-    'Num_of_Delayed_Payment', 
-    'Changed_Credit_Limit', 
-    'Num_Credit_Inquiries', 
-    'Credit_Mix', 
-    'Outstanding_Debt', 
-    'Credit_Utilization_Ratio', 
-    'Credit_History_Age', 
-    'Payment_of_Min_Amount', 
-    'Total_EMI_per_month', 
-    'Amount_invested_monthly', 
-    'Payment_Behaviour', 
-    'Monthly_Balance', 
-]
+def load_dataset(path: str):
+    if not os.path.exists(path):
+        raise FileNotFoundError(os.path.abspath(path))
 
-# 2) Globals used at inference time.
-#    They start as lightweight placeholders and are populated by load_pickle_bundle().
-ohe = None              # OneHotEncoder (loaded from pickle)
-scaler = None           # StandardScaler (loaded from pickle)
-NUM_COLS_FIT = []       # type: list[str]
-CAT_COLS_FIT = []       # type: list[str]
+    # Read as strings (robust), we’ll coerce numerics later
+    df = pd.read_csv(path, dtype=str, low_memory=False)
+
+    # Detect whether this file has labels
+    has_target = TARGET_COL in df.columns
+
+    if has_target:
+        # Normalize label capitalization/whitespace to avoid stray categories
+        y = (
+            df[TARGET_COL]
+            .astype(str)
+            .str.strip()
+            .str.title()      # "good" -> "Good", " BAD " -> "Bad"
+            .to_numpy()
+        )
+        X = df.drop(columns=[TARGET_COL]).copy()
+    else:
+        X, y = df.copy(), None
+
+    return X, y
+
+
+# Load train and test
+X_tr_df, y_tr_str = load_dataset(TRAIN_CSV)
+X_te_df, y_te_str = load_dataset(TEST_CSV)
+
+CLASS_NAMES = ["Poor", "Standard", "Good"]   # keep this order stable
+name_to_idx = {n: i for i, n in enumerate(CLASS_NAMES)}
+
+# After loading train:
+X_tr_df, y_tr_str = load_dataset(TRAIN_CSV)
+if y_tr_str is None:
+    raise ValueError("train.csv must include the 'Credit_Score' column.")
+
+# Map labels → integers (default to Standard if an odd label sneaks in)
+y_tr = np.array([name_to_idx.get(s, 1) for s in y_tr_str], dtype=np.int64)
+
+# Load test (may be unlabeled)
+X_te_df, y_te_str = load_dataset(TEST_CSV)
+y_te = None if y_te_str is None else np.array([name_to_idx.get(s, 1) for s in y_te_str], dtype=np.int64)
+
+def clean_train_type_of_loan_col(df: pd.DataFrame) -> pd.DataFrame:
+    if "Type_of_Loan" not in df.columns:
+        return df
+    cleaned = []
+    for val in df["Type_of_Loan"].astype(str).tolist():
+        matched, _ = normalize_loan_types(val)
+        cleaned.append(", ".join(sorted(matched)) if matched else "Not Specified")
+    out = df.copy()
+    out["Type_of_Loan"] = cleaned
+    return out
+
+# Clean both train and test frames so OHE sees the same vocabulary
+X_tr_df = clean_train_type_of_loan_col(X_tr_df)
+X_te_df = clean_train_type_of_loan_col(X_te_df)
+
+# ───────────────── PREPROCESSORS ─────────────────
+def make_ohe():
+    try:
+        return OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+    except TypeError:
+        return OneHotEncoder(handle_unknown="ignore", sparse=False)
+
+def parse_history_months(s: pd.Series) -> pd.Series:
+    """
+    Convert strings like '17 Years and 4 Months' to numeric months (17*12+4=208).
+    Returns a numeric Series with NaNs replaced by 0.0.
+    """
+    out = []
+    for x in s.astype(str):
+        xl = x.lower()
+        yrs = 0
+        mos = 0
+        try:
+            if "year" in xl:
+                # grab number before 'year'
+                parts = xl.split("year")[0].strip().split()
+                if parts:
+                    yrs = int(parts[-1])
+            if "month" in xl:
+                # grab number before 'month'
+                parts = xl.split("month")[0].strip().split()
+                if parts:
+                    mos = int(parts[-1])
+        except Exception:
+            yrs, mos = 0, 0
+        out.append(yrs * 12 + mos)
+    return pd.to_numeric(pd.Series(out), errors="coerce").fillna(0.0)
+
+# Keep only low/medium-cardinality categorical columns (to avoid memory blow-up)
+CAT_WHITELIST = {
+    "Month",                    # 12 months
+    "Occupation",               # job titles (moderate variety)
+    "Credit_Mix",               # Good / Standard / Bad
+    "Payment_Behaviour",        # spending pattern tags
+    "Payment_of_Min_Amount",    # Yes / No
+}
+
+def collapse_rare(df: pd.DataFrame, col: str, top_n: int = 50) -> pd.Series:
+    """
+    Keep only the top_n most common categories, replace others with '__OTHER__'.
+    """
+    if col not in df.columns:
+        return pd.Series([], dtype=str)
+    vc = df[col].astype(str).value_counts()
+    keep = set(vc.head(top_n).index)
+    s = df[col].astype(str).where(df[col].astype(str).isin(keep), other="__OTHER__")
+    return s
+
+def split_num_cat(df: pd.DataFrame):
+    raw = df.copy()
+
+    # ---- Build engineered numerics (before dtype split) ----
+    # Credit_History_Age -> numeric months
+    if "Credit_History_Age" in raw.columns:
+        raw["eng_history_months"] = parse_history_months(raw["Credit_History_Age"])
+
+    # Try to create a monthly income (if both present we still keep both)
+    # This is just for derived features; we won't drop originals
+    income_m = None
+    if "Monthly_Inhand_Salary" in raw.columns:
+        # already monthly
+        pass
+    elif "Annual_Income" in raw.columns:
+        # create an auxiliary monthly estimate
+        raw["Monthly_Inhand_Salary"] = (
+            pd.to_numeric(raw["Annual_Income"], errors="coerce") / 12.0
+        )
+
+    # Coerce numerics
+    num_coerced = raw.apply(pd.to_numeric, errors="coerce")
+
+    # Numeric = columns that convert to at least some numbers
+    numeric_cols = [c for c in raw.columns if not num_coerced[c].isna().all()]
+    num_df = num_coerced[numeric_cols].fillna(0.0)
+
+    # ---- Engineered: numeric occupation risk feature ----
+    if "Occupation" in raw.columns:
+        occ_series = raw["Occupation"].astype(str)
+        occ_risk = occ_series.map(occupation_risk_value).astype(float).fillna(OCC_RISK.get("_______", 0.08))
+        # Amplify so the scaler/NN sees meaningful variance
+        num_df["eng_occ_risk"] = occ_risk * OCC_FEATURE_MULT
+
+    # ---- Add multi-hot loan flags as numeric features ----
+    if "Type_of_Loan" in raw.columns:
+        loan_flags = loan_flags_from_series(raw["Type_of_Loan"])
+        # numeric features must be numeric (float), aligned by index
+        num_df = pd.concat([num_df, loan_flags], axis=1)
+
+    # inside split_num_cat(df) after you build num_df
+    # Be robust to missing columns
+    inc = num_df.get("Monthly_Inhand_Salary", pd.Series(0.0, index=num_df.index))
+    emi = num_df.get("Total_EMI_per_month", pd.Series(0.0, index=num_df.index))
+    inv = num_df.get("Amount_invested_monthly", pd.Series(0.0, index=num_df.index))
+    debt = num_df.get("Outstanding_Debt", pd.Series(0.0, index=num_df.index))
+    util = num_df.get("Credit_Utilization_Ratio", pd.Series(np.nan, index=num_df.index))
+
+    # Positive cash flow is good; negative is bad
+    num_df["eng_cash_flow"] = (inc - (emi + inv)).astype(float)
+
+    # Monthly burden ratios (bad when high)
+    denom = inc.replace(0, np.nan)
+    # Cap ratios to avoid tiny-income -> enormous ratios and make zero-income clearly extreme.
+    # Clip very large ratios to a bounded upper value and use a large fill for missing/zero income.
+    num_df["eng_burden"] = (
+        (emi / denom)
+        .replace([np.inf, -np.inf], np.nan)
+        .clip(upper=10.0)
+        .fillna(10.0)
+    )
+    num_df["eng_dti_monthly"] = (
+        ((emi + inv) / denom)
+        .replace([np.inf, -np.inf], np.nan)
+        .clip(upper=10.0)
+        .fillna(10.0)
+    )
+
+    # If utilization exists, keep it (bad when high)
+    if util.notna().any():
+        num_df["eng_utilization"] = util.clip(lower=0).fillna(0.0)
+
+
+    # ---- Categorical whitelist only (avoid ID/SSN/Name!) ----
+    cat_candidates = [c for c in raw.columns if c not in numeric_cols]
+    cat_keep = [c for c in cat_candidates if c in CAT_WHITELIST]
+
+    # Collapse very wide columns (like Occupation) to top-N
+    cat_df = pd.DataFrame(index=raw.index)
+    for c in cat_keep:
+        s = raw[c].astype(str).fillna("UNKNOWN")
+        if c in ("Occupation", "Type_of_Loan"):
+            s = collapse_rare(raw, c, top_n=50)
+        cat_df[c] = s
+
+    # If nothing left (edge case), return empty cat df with 0 columns
+    if cat_df.shape[1] == 0:
+        cat_df = pd.DataFrame(index=raw.index)
+
+    return num_df, cat_df
+
+def rule_risk_from_df(df: pd.DataFrame) -> float:
+    """
+    Return a risk probability in [0,1] built from interpretable heuristics.
+    Uses income/DTI/cashflow/utilization + loan-type penalties + counts.
+    """
+    row = df.iloc[0]
+
+    # Safe coercions
+    inc  = pd.to_numeric(row.get("Monthly_Inhand_Salary"), errors="coerce")
+    emi  = pd.to_numeric(row.get("Total_EMI_per_month"), errors="coerce")
+    inv  = pd.to_numeric(row.get("Amount_invested_monthly"), errors="coerce")
+    util = pd.to_numeric(row.get("Credit_Utilization_Ratio"), errors="coerce")
+    debt = pd.to_numeric(row.get("Outstanding_Debt"), errors="coerce")
+
+    n_acc   = pd.to_numeric(row.get("Num_Bank_Accounts"), errors="coerce")
+    n_cc    = pd.to_numeric(row.get("Num_Credit_Card"), errors="coerce")
+    n_loans = pd.to_numeric(row.get("Num_of_Loan"), errors="coerce")
+
+    credit_mix = str(row.get("Credit_Mix", "")).strip().lower()
+    behaviour  = str(row.get("Payment_Behaviour", "")).lower()
+
+    pieces = []
+
+    # Occupation penalty (interpretable rule)
+    occ_label = str(row.get("Occupation", "_______"))
+    occ_pen = OCC_RULE_MULT * occupation_risk_value(occ_label)
+    if occ_pen > 0:
+        pieces.append(occ_pen)
+
+    # Monthly burden and DTI
+    if pd.notna(inc) and inc > 0 and pd.notna(emi):
+        burden = float(emi) / float(inc)
+        pieces.append(np.clip((burden - 0.3) / 0.6, 0.0, 1.0))
+    else:
+        pieces.append(0.7)  # missing/zero income → elevated but not max
+
+    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv) and inc > 0:
+        dti_m = (float(emi) + float(inv)) / float(inc)
+        pieces.append(np.clip((dti_m - 0.3) / 0.6, 0.0, 1.0))
+
+    # Cash flow
+    if pd.notna(inc) and pd.notna(emi) and pd.notna(inv):
+        cash_flow = float(inc) - (float(emi) + float(inv))
+        pieces.append(0.9 if cash_flow < 0 else (0.6 if cash_flow < 300 else 0.1))
+
+    # Utilization
+    if pd.notna(util):
+        pieces.append(np.clip((float(util) - 0.3) / 0.5, 0.0, 1.0))
+
+    # ── Loan-type penalties (normalized) ──
+    matched, _ = normalize_loan_types(row.get("Type_of_Loan", ""))
+
+    # Per-type base risk weights
+    type_penalties = {
+        "Payday Loan":              0.50,
+        "Debt Consolidation Loan":  0.25,
+        "Personal Loan":            0.15,
+        "Student Loan":             0.10,
+        "Auto Loan":                0.05,
+        "Home Equity Loan":         0.04,
+        "Mortgage Loan":            0.03,
+        "Credit-Builder Loan":      0.00
+    }
+
+    # Calculate total risk sum and diversity
+    loan_risk = sum(type_penalties.get(t, 0.05) for t in matched)
+    n_types = len(matched)
+
+    # Reward diversity (more unique safe types)
+    if n_types > 1:
+        diversity_bonus = min(0.15 * np.log1p(n_types), 0.25)  # cap benefit
+    else:
+        diversity_bonus = 0.0
+
+    # Combine: more types = slightly less risk (but never negative)
+    loan_risk = max(0.0, loan_risk - diversity_bonus)
+
+    # Soft cap
+    loan_risk = min(0.7, loan_risk)
+    if loan_risk > 0:
+        pieces.append(loan_risk)
+
+    # Behaviour, credit mix, debt
+    if "high_spent" in behaviour:
+        pieces.append(0.6)
+    if credit_mix in {"bad", "poor"}:
+        pieces.append(0.7)
+    if pd.notna(debt):
+        pieces.append(np.clip(float(debt) / 15000.0, 0.0, 1.0))
+
+    # Counts
+    if pd.notna(n_acc):
+        if n_acc <= 0:
+            pieces.append(0.2)
+        elif n_acc >= 9:
+            pieces.append(0.15)
+    if pd.notna(n_cc):
+        if n_cc >= 8:
+            pieces.append(0.35)
+        elif n_cc >= 5:
+            pieces.append(0.2)
+        elif n_cc == 0:
+            pieces.append(0.1)
+    if pd.notna(n_loans):
+        if n_loans >= 6:
+            pieces.append(0.5)
+        elif n_loans >= 4:
+            pieces.append(0.3)
+        elif n_loans == 0:
+            pieces.append(0.05)
+
+    if not pieces:
+        return 0.3
+
+    # Emphasize worst half
+    k = max(1, int(len(pieces) * 0.5))
+    return float(np.mean(sorted(pieces)[-k:]))
+
+
+# ───────────────── TRAIN PREP (dynamic) ─────────────────
+ohe = make_ohe()
+scaler = StandardScaler()
+
+# Split using current CSV headers
+num_tr, cat_tr = split_num_cat(X_tr_df)
+num_te, cat_te = split_num_cat(X_te_df)
+
+# Remember the exact column order we fit on (important for inference)
+NUM_COLS_FIT = list(num_tr.columns)
+CAT_COLS_FIT = list(cat_tr.columns)
+
+# Fit on train, transform both
+X_tr_cat = ohe.fit_transform(cat_tr)
+X_tr_num = scaler.fit_transform(num_tr.values)
+
+X_te_cat = ohe.transform(cat_te.reindex(columns=CAT_COLS_FIT, fill_value="UNKNOWN"))
+X_te_num = scaler.transform(
+    num_te.reindex(columns=NUM_COLS_FIT, fill_value=0.0).values
+)
+
+X_train = np.hstack([X_tr_num, X_tr_cat]).astype(np.float32)
+X_test  = np.hstack([X_te_num, X_te_cat]).astype(np.float32)
+
+Xtr = torch.tensor(X_train, dtype=torch.float32)
+ytr = torch.tensor(y_tr, dtype=torch.long)
+Xte = torch.tensor(X_test, dtype=torch.float32)
+yte = torch.tensor(y_te, dtype=torch.long) if y_te is not None else None
+
+train_loader = DataLoader(TensorDataset(Xtr, ytr), batch_size=16, shuffle=True)
 
 
 class MLP(nn.Module):
@@ -334,6 +653,13 @@ def load_pickle_bundle(device: str = "cpu"):
     model.eval()
 
     print("✔ Loaded full model bundle from", BUNDLE_PATH)
+
+def load_artifacts(device: str = "cpu"):
+    """
+    Thin wrapper used by the FastAPI/Flask servers.
+    Just load the pre-trained bundle into global variables.
+    """
+    load_pickle_bundle(device=device)
 
 # ───────────────── EXPLANATION (optional via Captum) ─────────────────
 def try_import_captum():
