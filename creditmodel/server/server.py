@@ -93,5 +93,6 @@ def score():
 # ---------------- Entrypoint ----------------
 if __name__ == "__main__":
     # Run directly: python server.py
+    port = int(os.environ.get("PORT", 8080))
     # For hot reload in dev, set debug=True (don’t use in prod)
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=True)
