@@ -335,6 +335,18 @@ def load_pickle_bundle(device: str = "cpu"):
 
     print("✔ Loaded full model bundle from", BUNDLE_PATH)
 
+def split_num_cat(df: pd.DataFrame):
+    """
+    Split a DataFrame into numeric and non-numeric (categorical) parts.
+
+    Returns:
+        num_df: DataFrame with only numeric columns
+        cat_df: DataFrame with only non-numeric columns
+    """
+    num_df = df.select_dtypes(include=[np.number]).copy()
+    cat_df = df.select_dtypes(exclude=[np.number]).copy()
+    return num_df, cat_df
+
 # ───────────────── EXPLANATION (optional via Captum) ─────────────────
 def try_import_captum():
     try:
