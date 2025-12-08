@@ -14,7 +14,7 @@ app = FastAPI(title="Credit Scoring API", version="1.0")
 
 origins = [
     "http://localhost:3000",                 # local Next.js dev
-    "https://6936286965c08d0008512ff7--tiny-semifreddo-3201cb.netlify.app", # 🔴 put your real Netlify URL here
+    "https://tiny-semifreddo-3201cb.netlify.app",
 ]
 
 # CORS (loosen for local dev; tighten in prod)
