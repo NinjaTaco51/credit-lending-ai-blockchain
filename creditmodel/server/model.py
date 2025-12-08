@@ -350,11 +350,11 @@ def split_num_cat(df: pd.DataFrame):
 def rule_risk_from_df(df: pd.DataFrame) -> float:
     row = df.iloc[0]
 
-    income = float(row.get("income_monthly", 0) or 0)
-    housing = float(row.get("housing_cost_monthly", 0) or 0)
-    other = float(row.get("other_expenses_monthly", 0) or 0)
-    num_loans = float(row.get("num_loans", 0) or 0)
-    num_credit_cards = float(row.get("num_credit_cards", 0) or 0)
+    income = float(row.get("Monthly_Inhand_Salary", 0) or 0)
+    total_emi = float(row.get("Total_EMI_per_month", 0) or 0)
+    invested = float(row.get("Amount_invested_monthly", 0) or 0)
+    num_loans = float(row.get("Num_of_Loan", 0) or 0)
+    num_credit_cards = float(row.get("Num_Credit_Card", 0) or 0)
 
     total_expenses = housing + other
     dti = total_expenses / max(income, 1.0)
