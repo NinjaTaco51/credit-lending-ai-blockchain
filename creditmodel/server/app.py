@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import uvicorn
+import logging
 
 # Import the in-memory model pipeline
 from .model import predict_from_user_payload, load_pickle_bundle
@@ -54,7 +55,8 @@ def score(req: ScoreRequest):
         result = predict_from_user_payload(payload)
         return result
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logging.exception("Error in /score")  # <-- prints full traceback to Render logs
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -301,12 +301,25 @@ export default function Dashboard() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Server error:", errorData);
-        alert(`Error: ${errorData.error}`);
+        let message = "Unknown server error";
+
+        try {
+          const errorData = await response.json();
+          console.error("Server error:", errorData);
+          // Prefer FastAPI's 'detail', fall back to 'error', then stringify
+          message =
+            errorData.detail ||
+            errorData.error ||
+            JSON.stringify(errorData);
+        } catch (parseErr) {
+          console.error("Failed to parse error response:", parseErr);
+        }
+
+        alert(`Error: ${message}`);
         setIsLoading(false);
         return;
       }
+
 
       const result = await response.json();
 
