@@ -347,6 +347,24 @@ def split_num_cat(df: pd.DataFrame):
     cat_df = df.select_dtypes(exclude=[np.number]).copy()
     return num_df, cat_df
 
+def rule_risk_from_df(df: pd.DataFrame) -> float:
+    row = df.iloc[0]
+
+    income = float(row.get("income_monthly", 0) or 0)
+    housing = float(row.get("housing_cost_monthly", 0) or 0)
+    other = float(row.get("other_expenses_monthly", 0) or 0)
+    num_loans = float(row.get("num_loans", 0) or 0)
+    num_credit_cards = float(row.get("num_credit_cards", 0) or 0)
+
+    total_expenses = housing + other
+    dti = total_expenses / max(income, 1.0)
+
+    loan_factor = min(num_loans / 10.0, 1.0)
+    card_factor = min(num_credit_cards / 10.0, 1.0)
+
+    risk = 0.6 * dti + 0.25 * loan_factor + 0.15 * card_factor
+    return float(np.clip(risk, 0.0, 1.0))
+
 # ───────────────── EXPLANATION (optional via Captum) ─────────────────
 def try_import_captum():
     try:
