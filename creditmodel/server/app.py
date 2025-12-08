@@ -11,6 +11,7 @@ import logging
 # Import the in-memory model pipeline
 from .model import predict_from_user_payload, load_pickle_bundle
 
+logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Credit Scoring API", version="1.0")
 
 app.add_middleware(
@@ -23,8 +24,17 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
-    # Load pretrained model + preprocessors into memory
-    load_pickle_bundle()
+    global MODEL_LOADED
+    try:
+        logging.info("Loading pickle bundle...")
+        load_pickle_bundle()
+        MODEL_LOADED = True
+        logging.info("✅ Model bundle loaded successfully.")
+    except Exception as e:
+        MODEL_LOADED = False
+        logging.exception("❌ Failed to load model bundle on startup.")
+        # Important: don't re-raise here, or uvicorn will crash.
+        # Let the app start; /score can handle MODEL_LOADED = False.
 
 # ----- Schema expected from React form -----
 class ScoreRequest(BaseModel):
@@ -51,11 +61,14 @@ def health():
 @app.post("/score")
 def score(req: ScoreRequest):
     try:
+        if not MODEL_LOADED:
+            raise RuntimeError("Model bundle not loaded")
+
         payload = req.model_dump()
         result = predict_from_user_payload(payload)
         return result
     except Exception as e:
-        logging.exception("Error in /score")  # <-- prints full traceback to Render logs
+        logging.exception("Error in /score")
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
 if __name__ == "__main__":
