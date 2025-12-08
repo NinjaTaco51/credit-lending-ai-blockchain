@@ -348,7 +348,18 @@ def split_num_cat(df: pd.DataFrame):
     return num_df, cat_df
 
 def rule_risk_from_df(df: pd.DataFrame) -> float:
+    """
+    Simple rule-based risk using the train.csv-style columns.
+    Returns a probability in [0, 1], higher = more risky.
+    """
     row = df.iloc[0]
+
+    # These are set in build_df_from_user_payload():
+    #   Monthly_Inhand_Salary       ← income_monthly
+    #   Total_EMI_per_month        ← housing_cost_monthly + other_expenses_monthly
+    #   Amount_invested_monthly    ← invested
+    #   Num_of_Loan                ← num_loans
+    #   Num_Credit_Card            ← num_credit_cards
 
     income = float(row.get("Monthly_Inhand_Salary", 0) or 0)
     total_emi = float(row.get("Total_EMI_per_month", 0) or 0)
@@ -356,14 +367,22 @@ def rule_risk_from_df(df: pd.DataFrame) -> float:
     num_loans = float(row.get("Num_of_Loan", 0) or 0)
     num_credit_cards = float(row.get("Num_Credit_Card", 0) or 0)
 
-    total_expenses = housing + other
-    dti = total_expenses / max(income, 1.0)
+    # Treat EMI + invested as the core monthly outflow
+    total_expenses = total_emi + invested
 
+    # Debt-to-income style ratio
+    dti = total_expenses / max(income, 1.0)  # avoid div-by-zero
+
+    # Normalize counts into [0,1]
     loan_factor = min(num_loans / 10.0, 1.0)
     card_factor = min(num_credit_cards / 10.0, 1.0)
 
+    # Combine into rule-based risk
     risk = 0.6 * dti + 0.25 * loan_factor + 0.15 * card_factor
+
+    # Clamp to [0,1]
     return float(np.clip(risk, 0.0, 1.0))
+
 
 # ───────────────── EXPLANATION (optional via Captum) ─────────────────
 def try_import_captum():
