@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { CreditCard, History, DollarSign, User, FileText, BookOpen, HelpCircle, Menu, X, AlertCircle, CheckCircle, Home, Car, GraduationCap, Briefcase, LogOut, BanknoteArrowDown } from 'lucide-react';
 import supabase from "../../../config/supabaseClient"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [creditScore, setCreditScore] = useState(0);
@@ -73,17 +75,17 @@ export default function Dashboard() {
       }
 
       let trueLoans = {
-          mortgage: false,
-          auto: false,
-          student: false,
-          personal: false,
-          debtConsol: false,
-          creditBuilder: false,
-          payDay: false,
-          homeEquity: false,
-          other: false
-        }
-  
+        mortgage: false,
+        auto: false,
+        student: false,
+        personal: false,
+        debtConsol: false,
+        creditBuilder: false,
+        payDay: false,
+        homeEquity: false,
+        other: false
+      }
+
       if (data.credit_data) {
         let dbLoans = data.credit_data.loans;
         for (let i = 0; i < dbLoans.length; i++) {
@@ -139,7 +141,7 @@ export default function Dashboard() {
 
     fetchAndPrefill();
   }, []);
-  
+
   const getScoreColor = (score) => {
     if (score >= 800) return '#10b981';
     if (score >= 740) return '#3b82f6';
@@ -147,7 +149,7 @@ export default function Dashboard() {
     if (score >= 580) return '#f97316';
     return '#ef4444';
   };
-  
+
   const getScoreLabel = (score) => {
     if (score >= 800) return 'Excellent';
     if (score >= 740) return 'Very Good';
@@ -155,14 +157,14 @@ export default function Dashboard() {
     if (score >= 580) return 'Fair';
     return 'Poor';
   };
-  
+
   const handleInputChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
   };
-  
+
   const handleCheckboxChange = (e) => {
     const { name, checked } = e.target;
     if (name in formData.loanTypes) {
@@ -180,7 +182,7 @@ export default function Dashboard() {
       });
     }
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -230,8 +232,8 @@ export default function Dashboard() {
     }
 
     const monthNames = [
-      "January","February","March","April","May","June",
-      "July","August","September","October","November","December",
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
     ];
     const application_month = monthNames[today.getMonth()];
 
@@ -283,7 +285,14 @@ export default function Dashboard() {
 
     // Call scoring model API
     try {
-      const response = await fetch("http://localhost:8080/score", {
+      if (!API_URL) {
+        console.error("API_URL is not defined. Check NEXT_PUBLIC_API_URL.");
+        alert("Configuration error: API URL is not set.");
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/score`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -324,19 +333,19 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   };
-  
+
   const scoreColor = getScoreColor(creditScore);
   const scoreLabel = getScoreLabel(creditScore);
   const scorePercentage = (creditScore / 850) * 100;
-  
+
   const navItems = [
-    { icon: CreditCard,label: 'Credit Score', href: '/borrower/credit-score'},
+    { icon: CreditCard, label: 'Credit Score', href: '/borrower/credit-score' },
     { icon: BanknoteArrowDown, label: 'Loan Dashboard', href: '/borrower/loans' },
     { icon: DollarSign, label: 'Loan Payments', href: '/borrower/loans/loan-payment' },
     { icon: User, label: 'Profile', href: '/borrower/profile' },
-    { icon: LogOut, label: 'Logout', href: '/logout'}
+    { icon: LogOut, label: 'Logout', href: '/logout' }
   ];
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Navigation Bar */}
@@ -348,7 +357,7 @@ export default function Dashboard() {
                 <h1 className="text-2xl font-bold text-slate-800">CreditView</h1>
               </div>
             </div>
-            
+
             {/* Desktop Navigation */}
             <div className="hidden lg:flex space-x-1">
               {navItems.map((item) => (
@@ -362,7 +371,7 @@ export default function Dashboard() {
                 </a>
               ))}
             </div>
-            
+
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -372,7 +381,7 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
-        
+
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white">
@@ -391,21 +400,21 @@ export default function Dashboard() {
           </div>
         )}
       </nav>
-      
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-slate-800 mb-2">Credit Score Dashboard</h2>
           <p className="text-slate-600">Enter your information to view your credit score</p>
         </div>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Side - Input Form */}
           <div className="bg-white rounded-2xl shadow-lg p-8 max-h-[800px] overflow-y-auto">
             <h3 className="text-2xl font-bold text-slate-800 mb-6">Your Information</h3>
-            
+
             <div className="space-y-4">
-              
+
               {/* Monthly Income */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -425,7 +434,7 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              
+
               {/* Monthly Housing Cost */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -445,7 +454,7 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              
+
               {/* Other Monthly Expenses */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -466,7 +475,7 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              
+
               {/* Invested Amount */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -516,7 +525,7 @@ export default function Dashboard() {
                   <option value="other">Other</option>
                 </select>
               </div>
-              
+
               {/* Educational Level */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -538,7 +547,7 @@ export default function Dashboard() {
                   <option value="other">Other</option>
                 </select>
               </div>
-              
+
               {/* Number of Credit Card */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -694,7 +703,7 @@ export default function Dashboard() {
                   </label>
                 </div>
               </div>
-              
+
               <button
                 onClick={handleSubmit}
                 disabled={isLoading}
@@ -704,7 +713,7 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-          
+
           {/* Right Side - Credit Score Display */}
           <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12">
             {!showScore ? (
@@ -746,24 +755,24 @@ export default function Dashboard() {
                       style={{ transition: 'stroke-dasharray 1s ease-in-out' }}
                     />
                   </svg>
-                  
+
                   {/* Score text */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <div className="text-6xl font-bold text-slate-800">{creditScore}</div>
                     <div className="text-sm text-slate-500 mt-1">out of 850</div>
                   </div>
                 </div>
-                
+
                 {/* Score label */}
                 <div className="mb-8">
-                  <span 
+                  <span
                     className="inline-block px-6 py-2 rounded-full text-white font-semibold text-lg"
                     style={{ backgroundColor: scoreColor }}
                   >
                     {scoreLabel}
                   </span>
                 </div>
-                
+
                 {/* Score range indicators */}
                 <div className="w-full max-w-md mb-8">
                   <div className="flex justify-between text-xs text-slate-600 mb-2">
@@ -779,7 +788,7 @@ export default function Dashboard() {
                     <span>850</span>
                   </div>
                 </div>
-                
+
                 {/* Score Reasons */}
                 {reasons.length > 0 && (
                   <div className="w-full max-w-md">

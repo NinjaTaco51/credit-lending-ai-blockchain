@@ -12,11 +12,16 @@ from .model import predict_from_user_payload, load_pickle_bundle
 
 app = FastAPI(title="Credit Scoring API", version="1.0")
 
+origins = [
+    "http://localhost:3000",                 # local Next.js dev
+    "https://credit-model-api.onrender.com", # 🔴 put your real Netlify URL here
+]
+
 # CORS (loosen for local dev; tighten in prod)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # e.g., ["http://localhost:3000"]
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=False,  # you don't send cookies to this API
     allow_methods=["*"],
     allow_headers=["*"],
 )
