@@ -16,7 +16,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Hardhat
-artifacts/
+loandesk/artifacts/
 cache/
 typechain/
 typechain-types/
@@ -28,9 +28,12 @@ dist/
 out/
 
 # Environment variables
+# Environment variables
 .env
 .env.local
+.env.production
 .env.production.local
+.env.development
 .env.development.local
 
 # IDE
